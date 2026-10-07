@@ -822,7 +822,7 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
   if(!user)return <Empty title="Create your profile" text="Sign in to create a profile that other members can discover." action={()=>go('/login')} actionText="Sign in"/>;
   const pickPhoto=async(file?:File)=>{
     if(!file)return;
-    if(!/^image\\/(jpeg|png|webp)$/i.test(file.type)){
+    if(!/^image\/(jpeg|png|webp)$/i.test(file.type)){
       alert('Please choose a JPEG, PNG or WebP photo.');
       return;
     }
