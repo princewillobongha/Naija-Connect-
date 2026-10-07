@@ -175,7 +175,7 @@ class AppErrorBoundary extends React.Component<{children:React.ReactNode},{hasEr
   render(){return this.state.hasError ? <div className="loading-screen"><div className="brand-mark">N</div><h2>NaijaConnect</h2><p>Something went wrong loading the app.</p><button className="primary" onClick={()=>window.location.reload()}>Reload NaijaConnect</button></div> : this.props.children;}
 }
 
-function App() {
+function AppContent() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>(demoProfiles);
@@ -521,5 +521,7 @@ function Login({ signIn, signUp }: { signIn: (email?: string, password?: string)
   );
 }
 
+
+function App() { return <AppErrorBoundary><AppContent /></AppErrorBoundary>; }
 
 export default App;
