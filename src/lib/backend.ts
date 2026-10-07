@@ -112,9 +112,11 @@ export const api = {
     }
     if (path.startsWith('/api/admin/messages')) {
       if (!u) throw new Error('Unauthorized');
-      const {data,error}=await supabase.from('admin_messages').select('*').eq('user_id',u.id).order('created_at',{ascending:false});
+      const isAdmin = u.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      const query = supabase.from('admin_messages').select('*').order('created_at',{ascending:true});
+      const {data,error}=isAdmin ? await query : await query.eq('user_id',u.id);
       if(error) throw error;
-      return {data:{messages:(data||[]).map((m:any)=>({id:m.id,text:m.text,createdAt:new Date(m.created_at).getTime()}))}};
+      return {data:{messages:(data||[]).map((m:any)=>({id:m.id,userId:m.user_id,text:m.text,senderType:m.sender_type,createdAt:new Date(m.created_at).getTime()}))}};
     }
     if (path.startsWith('/api/messages/')) {
       const other=path.split('/').pop();
