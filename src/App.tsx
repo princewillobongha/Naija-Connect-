@@ -474,13 +474,25 @@ function ProfileCard({p,onLike}:{p:Profile,onLike:(id:string)=>void}){
 
 function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Profile[],user:any,onLike:(id:string)=>void,onConnect:(p:Profile)=>void}){
   const p=profiles.find(x=>x.id===id)||demoProfiles.find(x=>x.id===id);
+  const own=!!user&&p?.id===user.userId;
+  const [menu,setMenu]=useState(false);
   if(!p)return <Empty title="Profile not found" text="This profile may have been removed." action={()=>go('/discover')} actionText="Back to discover"/>;
+  const share=async()=>{try{if(navigator.share) await navigator.share({title:'NaijaConnect profile',text:'Check out '+p.name+' on NaijaConnect.',url:window.location.href});else await navigator.clipboard.writeText(window.location.href);setMenu(false);}catch{}};
   return <section className="detail-page"><button className="back-link" onClick={()=>go('/discover')}>← Back to discover</button><div className="profile-detail">
     <div className="detail-photo">{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}</div>
-    <div className="detail-copy"><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'} {p.verified&&' • VERIFIED'}</div><h1>{p.name}, {p.age}</h1><div className="detail-location"><MapPin size={18}/>{p.distanceKm!==undefined?`${p.distanceKm.toFixed(1)} km away`:`${p.city}, ${p.country}`}</div><p className="big-bio">{p.bio||'This member has not added a bio yet.'}</p><div className="detail-section"><h3>About</h3><p>{p.city}, {p.country} • {p.age} years old</p></div><div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div><div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div><div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18}/> Interested</button><button className="icon-square" onClick={()=>go('/safety')} aria-label="Safety options"><MoreHorizontal/></button></div><p className="connect-note">Tap Connect to email the NaijaConnect admin and request an introduction to this profile.</p></div>
+    <div className="detail-copy">
+      <div className="detail-topline"><div><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'} {p.verified&&' • VERIFIED'}</div><h1>{p.name}</h1><div className="detail-age">{p.age} years old</div></div><div className="profile-more-wrap"><button className="icon-square" onClick={()=>setMenu(v=>!v)} aria-label="More profile options"><MoreHorizontal/></button>{menu&&<div className="profile-more-menu"><button onClick={share}>Share profile</button><button onClick={()=>{setMenu(false);go('/safety')}}>Safety & report</button></div>}</div></div>
+      <div className="detail-location"><MapPin size={18}/>{p.city}, {p.country}</div>
+      <p className="big-bio">{p.bio||'This member has not added a bio yet.'}</p>
+      <div className="detail-section"><h3>About</h3><p>{p.city}, {p.country}</p></div>
+      {p.interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div>}
+      <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div>
+      {!own&&<div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
+      {!own&&<p className="connect-note">Interested is a simple ❤️ reaction. Connect sends a request for an introduction through the official NaijaConnect admin.</p>}
+      {own&&<button className="primary" onClick={()=>go('/profile')}>Edit my profile</button>}
+    </div>
   </div></section>
 }
-
 function Matches({ matches }: { matches: Match[] }) {
   return (
     <section className="content-page">
