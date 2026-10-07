@@ -110,6 +110,15 @@ export const api = {
       return {data:{profile:mapProfile(data)}};
     }
     if (path === '/api/profiles') return {data:{profiles:await getProfiles()}};
+    if (path === '/api/admin/users') {
+      if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
+      const {data:profiles,error:profilesError}=await supabase.from('profiles').select('*').order('created_at',{ascending:false});
+      if(profilesError) throw profilesError;
+      const {data:contacts,error:contactsError}=await supabase.from('user_contacts').select('user_id,phone');
+      if(contactsError) throw contactsError;
+      const phoneByUser=new Map((contacts||[]).map((c:any)=>[c.user_id,c.phone]));
+      return {data:{users:(profiles||[]).filter((p:any)=>p.id!==u.id).map((p:any)=>({...mapProfile(p),phone:phoneByUser.get(p.id)||''}))}};
+    }
     if (path === '/api/likes/me') {
       if (!u) throw new Error('Sign in required');
       const {data,error}=await supabase.from('likes').select('profile_id').eq('user_id',u.id);
