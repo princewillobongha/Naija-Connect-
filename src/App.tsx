@@ -578,7 +578,7 @@ function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Pro
       <div className="detail-section"><h3>About</h3><p>{p.city}, {p.country}</p></div>
       {p.interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div>}
       <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div>
-      {!own&&<div className="detail-actions"><div className="connect-email-action"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><small>Introduction request via email: {ADMIN_EMAIL}</small></div><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
+      {!own&&<div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
       
       {own&&<button className="primary" onClick={()=>go('/profile')}>Edit my profile</button>}
     </div>
