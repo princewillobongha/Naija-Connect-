@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, auth, ws } from './lib/backend';
 import {
   Heart,
@@ -167,6 +167,7 @@ function avatarColor(name: string) {
   ];
   return colors[name.charCodeAt(0) % colors.length];
 }
+
 
 class AppErrorBoundary extends React.Component<{children:React.ReactNode},{hasError:boolean}> {
   state={hasError:false};
@@ -382,159 +383,6 @@ function AppContent() {
 
     </div>
     </AppErrorBoundary>
-  );
-}
-
-function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;signIn:()=>void;signOut:()=>void}) {
-  const [open,setOpen]=useState(false);
-  const admin=isAdminUser(user);
-  return <header className="topbar">
-    <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
-    <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/community')}>Community</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
-    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
-    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/community')}}><MessageCircle size={17}/> Community</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
-  </header>;
-}
-
-function Home({ user, signIn }: { user: any; signIn: () => void }) {
-  return (
-    <section className="home-page">
-      <div className="hero-card">
-        <div className="eyebrow">
-          <span className="pulse"></span> NIGERIAN-FIRST CONNECTIONS
-        </div>
-        <h1>
-          Meet someone.          <br />
-          <em>Make it real.</em>        </h1>
-        <p>
-          Connect with Nigerians near you and around the world. Discover people,
-          find a mutual match and start a conversation.
-        </p>
-        <div className="hero-actions">
-          <button className="primary" onClick={() => user ? go('/discover') : go('/login')}>
-            Discover people <ChevronRight size={18} />
-          </button>
-          {!user && (
-            <button className="secondary" onClick={()=>go('/login')}>
-              Create your profile
-            </button>
-          )}
-        </div>
-        <div className="hero-points">
-          <span>
-            <ShieldCheck size={17} /> Safety tools
-          </span>
-          <span>
-            <MapPin size={17} /> Nigeria first
-          </span>
-          <span>
-            <MessageCircle size={17} /> Private chat
-          </span>
-        </div>
-      </div>
-      <div className="feature-grid">
-        <Feature
-          icon={<Compass />}
-          title="Discover"
-          text="Browse profiles by city, age and interests."
-          action={() => go('/discover')}
-        />
-        <Feature
-          icon={<Heart />}
-          title="Interested"
-          text="Show interest in profiles you like."
-          action={() => go('/discover')}
-        />
-        <Feature
-          icon={<MessageCircle />}
-          title="Message"
-          text="Contact the NaijaConnect admin for an introduction."
-          action={() => go('/discover')}
-        />
-        <Feature
-          icon={<ShieldCheck />}
-          title="Stay safe"
-          text="Block, report and control your privacy."
-          action={() => go('/safety')}
-        />
-      </div>
-      <div className="country-strip">
-        <strong>Nigeria</strong>
-        <span>•</span>
-        <span>Worldwide discovery</span>
-        <span>•</span>
-        <span>18+ only</span>
-      </div>
-    </section>
-  );
-}
-
-function Feature({
-  icon,
-  title,
-  text,
-  action,
-}: {
-  icon: any;
-  title: string;
-  text: string;
-  action: () => void;
-}) {
-  return (
-    <button className="feature-card" onClick={action}>
-      <span className="feature-icon">{icon}</span>
-      <span>
-        <strong>{title}</strong>
-        <small>{text}</small>
-      </span>
-      <ChevronRight />
-    </button>
-  );
-}
-
-function Login({ signIn, signUp }: { signIn: (email?: string, password?: string) => Promise<{ok:boolean;message:string}>; signUp: (email:string,password:string) => Promise<{ok:boolean;message:string}> }) {
-  const [mode,setMode]=useState<'signin'|'signup'>('signin');
-  const [email,setEmail]=useState('');
-  const [password,setPassword]=useState('');
-  const [confirm,setConfirm]=useState('');
-  const [busy,setBusy]=useState(false);
-  const [error,setError]=useState('');
-
-  const submit=async()=>{
-    const clean=email.trim();
-    setError('');
-    if(!/^\S+@\S+\.\S+$/.test(clean)){setError('Enter a valid email address.');return;}
-    if(password.length<8){setError('Password must be at least 8 characters.');return;}
-    if(mode==='signup' && password!==confirm){setError('Passwords do not match.');return;}
-    if(busy)return;
-    setBusy(true);
-    try{
-      const result = mode==='signin' ? await signIn(clean,password) : await signUp(clean,password);
-      if(!result.ok) setError(result.message);
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <section className="center-page">
-      <div className="auth-card auth-card-professional">
-        <div className="brand-large">N</div>
-        <span className="eyebrow auth-eyebrow">SECURE MEMBER ACCESS</span>
-        <h1>{mode==='signin'?'Welcome back':'Create your NaijaConnect account'}</h1>
-        <p>{mode==='signin'?'Sign in with your email and password.':'Create a secure account with your email and password.'}</p>
-        {error && <div className="auth-error" role="alert"><strong>We couldn't complete that.</strong><span>{error}</span></div>}
-        <label className="email-field"><span>Email address</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/></label>
-        <label className="email-field"><span>Password</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="At least 8 characters" autoComplete={mode==='signin'?'current-password':'new-password'}/></label>
-        {mode==='signup' && <label className="email-field"><span>Confirm password</span><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="Enter your password again" autoComplete="new-password"/></label>}
-        <button type="button" className="primary full auth-submit" disabled={busy} onClick={submit}>
-          {busy ? (mode==='signin'?'Signing in…':'Creating account…') : (mode==='signin'?<><LogIn size={18}/> Sign in</>:<>Create account <ChevronRight size={18}/></>)}
-        </button>
-        <button type="button" className="secondary full" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setError('');}}>
-          {mode==='signin'?'New to NaijaConnect? Create an account':'Already have an account? Sign in'}
-        </button>
-        <div className="auth-security"><ShieldCheck size={16}/><span>Your password is securely handled by Supabase Auth.</span></div>
-        <small className="legal">By continuing, you confirm that you are 18 or older and agree to use the platform respectfully.</small>
-      </div>
-    </section>
   );
 }
 
