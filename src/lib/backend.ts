@@ -13,7 +13,7 @@ async function currentUser() {
 }
 function mapProfile(p:any) {
   if (!p) return null;
-  return { id:p.id, userId:p.id, name:String(p.name||'Member'), age:Number(p.age||18), gender:p.gender||'', city:String(p.city||'Nigeria'), country:String(p.country||'Nigeria'), bio:String(p.bio||''), interests:Array.isArray(p.interests)?p.interests.map((x:any)=>String(x)).filter(Boolean):[], lookingFor:String(p.looking_for||'Dating / connection'), photo:p.photo||undefined, online:!!p.online, verified:!!p.verified, latitude:p.latitude, longitude:p.longitude };
+  return { id:p.id, userId:p.id, name:String(p.name||'Member'), age:Number(p.age||18), gender:p.gender||'', city:String(p.city||'Nigeria'), country:String(p.country||'Nigeria'), bio:String(p.bio||''), interests:Array.isArray(p.interests)?p.interests.map((x:any)=>String(x)).filter(Boolean):[], lookingFor:String(p.looking_for||'Dating / connection'), photo:p.photo||undefined, photos:Array.isArray(p.photos)?p.photos.filter(Boolean):(p.photo?[p.photo]:[]), online:!!p.online, verified:!!p.verified, latitude:p.latitude, longitude:p.longitude, lastActiveAt:p.last_active_at||undefined };
 }
 async function dataUrlToBlob(data:string, contentType:string) {
   const raw = data.includes(',') ? data.split(',')[1] : data;
@@ -32,9 +32,19 @@ async function uploadMedia(userId:string, data:string, contentType:string, folde
   return pub.publicUrl;
 }
 async function getProfiles() {
+  const me = await currentUser();
+  if (me) {
+    await supabase.from('profiles').update({last_active_at:new Date().toISOString(),online:true}).eq('id',me.id);
+  }
   const { data, error } = await supabase.from('profiles').select('*').order('created_at',{ascending:false});
   if (error) throw error;
-  return (data||[]).map(mapProfile);
+  let rows = data || [];
+  if (me) {
+    const {data:blocked}=await supabase.from('profile_blocks').select('blocked_id').eq('blocker_id',me.id);
+    const blockedIds=new Set((blocked||[]).map((x:any)=>x.blocked_id));
+    rows=rows.filter((p:any)=>p.id!==me.id && !blockedIds.has(p.id));
+  }
+  return rows.map(mapProfile);
 }
 async function getPosts() {
   const { data, error } = await supabase.from('posts').select('*, profiles:author_id(*)').order('created_at',{ascending:false});
@@ -110,6 +120,12 @@ export const api = {
       return {data:{profile:mapProfile(data)}};
     }
     if (path === '/api/profiles') return {data:{profiles:await getProfiles()}};
+    if (path === '/api/admin/reports') {
+      if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
+      const {data,error}=await supabase.from('profile_reports').select('*, reporter:reporter_id(*), reported:reported_id(*)').order('created_at',{ascending:false});
+      if(error) throw error;
+      return {data:{reports:(data||[]).map((r:any)=>({id:r.id,reason:r.reason,details:r.details,status:r.status,createdAt:new Date(r.created_at).getTime(),reporter:mapProfile(r.reporter),reported:mapProfile(r.reported)}))}};
+    }
     if (path === '/api/admin/users') {
       if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
       const {data:profiles,error:profilesError}=await supabase.from('profiles').select('*').order('created_at',{ascending:false});
@@ -157,8 +173,15 @@ export const api = {
         try { photo=await uploadMedia(u.id,body.photoData,body.photoContentType,'profiles'); }
         catch(e:any){ throw new Error('Could not upload your profile photo. ' + String(e?.message || 'Please choose another photo.')); }
       }
-      const row:any={id:u.id,name:String(body.name||'').trim(),age:Number(body.age),gender:body.gender||null,city:String(body.city||'').trim(),country:body.country||'Nigeria',bio:body.bio||'',interests:Array.isArray(body.interests)?body.interests:[],looking_for:body.lookingFor||'Dating / connection'};
+      const row:any={id:u.id,name:String(body.name||'').trim(),age:Number(body.age),gender:body.gender||null,city:String(body.city||'').trim(),country:body.country||'Nigeria',bio:body.bio||'',interests:Array.isArray(body.interests)?body.interests:[],looking_for:body.lookingFor||'Dating / connection',last_active_at:new Date().toISOString(),online:true};
       if(photo) row.photo=photo;
+      if(Array.isArray(body.photosData)){
+        const existing = Array.isArray((await supabase.from('profiles').select('photos').eq('id',u.id).maybeSingle()).data?.photos) ? (await supabase.from('profiles').select('photos').eq('id',u.id).maybeSingle()).data.photos : [];
+        const uploaded:string[]=[];
+        for(let i=0;i<body.photosData.length;i++){ if(body.photosData[i]) uploaded.push(await uploadMedia(u.id,body.photosData[i],(body.photoContentTypes||[])[i]||'image/jpeg','profiles')); }
+        row.photos=[...existing.filter((x:string)=>!uploaded.includes(x)),...uploaded].slice(-6);
+        if(row.photos[0]) row.photo=row.photos[0];
+      }
       const {data,error}=await supabase.from('profiles').upsert(row,{onConflict:'id'}).select().single();
       if(error) throw new Error('Could not save profile details. ' + error.message);
       if(body.phone !== undefined){
@@ -193,6 +216,20 @@ export const api = {
       const {data,error}=await supabase.from('post_comments').insert({post_id:body.postId,author_id:u.id,text}).select('id,post_id,author_id,text,created_at,profiles:author_id(*)').single();
       if(error) throw error;
       return {data:{comment:{id:data.id,postId:data.post_id,authorId:data.author_id,text:data.text,createdAt:new Date(data.created_at).getTime(),author:mapProfile(data.profiles)}}};
+    }
+    if(path==='/api/blocks'){
+      const blockedId=String(body.profileId||'');
+      if(!blockedId || blockedId===u.id) throw new Error('Invalid profile.');
+      const {data:existing}=await supabase.from('profile_blocks').select('blocked_id').eq('blocker_id',u.id).eq('blocked_id',blockedId).maybeSingle();
+      if(existing){ const {error}=await supabase.from('profile_blocks').delete().eq('blocker_id',u.id).eq('blocked_id',blockedId); if(error) throw error; return {data:{blocked:false}}; }
+      const {error}=await supabase.from('profile_blocks').insert({blocker_id:u.id,blocked_id:blockedId}); if(error) throw error;
+      return {data:{blocked:true}};
+    }
+    if(path==='/api/reports'){
+      const reportedId=String(body.profileId||''); const reason=String(body.reason||'Other').trim(); const details=String(body.details||'').trim();
+      if(!reportedId || reportedId===u.id) throw new Error('Invalid profile.');
+      const {data,error}=await supabase.from('profile_reports').insert({reporter_id:u.id,reported_id:reportedId,reason,details}).select().single(); if(error) throw error;
+      return {data:{report:data}};
     }
     if(path==='/api/likes'){
       const {data:existing}=await supabase.from('likes').select('*').eq('user_id',u.id).eq('profile_id',body.profileId).maybeSingle();
