@@ -1068,6 +1068,7 @@ function AdminPage(){
   const select=async(u:any)=>{setSelected(u);setStatus('');await loadThread(u.id);};
   const send=async()=>{const clean=text.trim();if(!selected||!clean)return;try{await api.post('/api/admin/messages',{userId:selected.id,text:clean});setText('');setStatus('Message sent.');await loadThread(selected.id);}catch(e:any){setStatus(e?.message||'Could not send the admin message.');}};
   const deleteUser=async(u:any)=>{if(!window.confirm('Delete '+(u.name||'this member')+' permanently? This cannot be undone.'))return;try{await api.post('/api/admin/delete-user',{userId:u.id});setUsers(old=>old.filter(x=>x.id!==u.id));if(selected?.id===u.id){setSelected(null);setMessages([]);}setStatus('Member account deleted.');}catch(e:any){setStatus(e?.message||'Could not delete this member.');}};
+  const toggleVerified=async(u:any)=>{try{const r=await api.post('/api/admin/verify-user',{userId:u.id,verified:!u.verified});setUsers(old=>old.map(x=>x.id===u.id?{...x,verified:r.data.profile.verified}:x));setStatus(r.data.profile.verified?'Profile verified.':'Verification removed.');}catch(e:any){setStatus(e?.message||'Could not update verification.');}};
   return <section className="content-page">
     <div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>NaijaConnect Admin</h1><p>Manage members, messages, safety reports and moderation.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div>
     <div className="admin-tabs">
@@ -1076,7 +1077,7 @@ function AdminPage(){
     </div>
     {tab==='members' && <div className="admin-layout">
       <div className="admin-requests">
-        {users.map(u=><div className="admin-member-row" key={u.id}><button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)}>Delete</button></div>)}
+        {users.map(u=><div className="admin-member-row" key={u.id}><button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button><button className={u.verified?'admin-verify-member active':'admin-verify-member'} onClick={()=>toggleVerified(u)}>{u.verified?'✓ Verified':'Verify'}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)}>Delete</button></div>)}
         {!users.length&&<div className="empty-mini">{status||'No member profiles yet.'}</div>}
       </div>
       <div className="admin-chat">
