@@ -104,6 +104,12 @@ export const api = {
       return {data:{profile:mapProfile(data)}};
     }
     if (path === '/api/profiles') return {data:{profiles:await getProfiles()}};
+    if (path === '/api/likes/me') {
+      if (!u) throw new Error('Sign in required');
+      const {data,error}=await supabase.from('likes').select('profile_id').eq('user_id',u.id);
+      if(error) throw error;
+      return {data:{likes:data||[]}};
+    }
     if (path === '/api/posts') return {data:{posts:await getPosts()}};
     if (path.startsWith('/api/admin/requests')) {
       if (!u || !ADMIN_EMAIL || u.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) throw new Error('Unauthorized');
