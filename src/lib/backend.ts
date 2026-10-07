@@ -91,6 +91,11 @@ export const auth = {
     if (error) throw error;
     return data;
   },
+  async deleteMyAccount(){
+    const { error } = await supabase.rpc('delete_my_account');
+    if (error) throw error;
+    await supabase.auth.signOut();
+  },
   async signOut(){ await supabase.auth.signOut(); },
   onAuthStateChange(callback:(event:string, session:any)=>void){ return supabase.auth.onAuthStateChange(callback); }
 };
@@ -202,6 +207,19 @@ export const api = {
       const {data,error}=await supabase.from('admin_messages').insert({user_id:targetUserId,text:String(body.text||'').trim(),sender_type:senderType}).select().single();
       if(error) throw error;
       return {data:{message:{id:data.id,userId:data.user_id,senderType:data.sender_type,text:data.text,createdAt:new Date(data.created_at).getTime()}}};
+    }
+    if(path==='/api/delete-my-account'){
+      const {error}=await supabase.rpc('delete_my_account');
+      if(error) throw error;
+      await supabase.auth.signOut();
+      return {data:{deleted:true}};
+    }
+    if(path==='/api/admin/delete-user'){
+      if(u.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) throw new Error('Unauthorized');
+      if(!body.userId) throw new Error('User is required.');
+      const {error}=await supabase.rpc('delete_account_as_admin',{target_user_id:body.userId});
+      if(error) throw error;
+      return {data:{deleted:true}};
     }
     if(path==='/api/subscriptions') return {data:{}};
     throw new Error('Unsupported POST '+path);

@@ -295,6 +295,17 @@ function App() {
   };
 
   const signOut = async () => { await auth.signOut(); setUser(null); setProfile(null); setMatches([]); setPosts([]); go('/'); };
+  const deleteMyAccount = async () => {
+    if (!window.confirm('Delete your NaijaConnect account permanently? Your profile, interests, messages and account will be removed. This cannot be undone.')) return;
+    try {
+      await api.post('/api/delete-my-account', {});
+      setUser(null); setProfile(null); setMatches([]); setPosts([]); setInterestedIds(new Set()); setDemoInterested(new Set());
+      setNotice('Your NaijaConnect account has been permanently deleted.');
+      go('/');
+    } catch (e:any) {
+      setNotice(e?.message || 'Your account could not be deleted. Please try again.');
+    }
+  };
   const like = async (id: string) => {
     if (!user) { setNotice('Sign in to mark profiles as interested.'); go('/login'); return; }
     try {
@@ -355,7 +366,7 @@ function App() {
     {path === '/admin' && isAdminUser(user) && <AdminPage />}
     {path === '/admin-messages' && user && <AdminMessages />}
     {user && path === '/profile' && <MyProfile user={user} profile={profile} onSaved={refresh} />}
-    {user && path === '/settings' && <SettingsPage user={user} signOut={signOut} />}
+    {user && path === '/settings' && <SettingsPage user={user} signOut={signOut} onDeleteAccount={deleteMyAccount} />}
     {path === '/safety' && <SafetyPage />}
   </main></div></AppErrorBoundary>;
 }
@@ -897,7 +908,7 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
 </div><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label>Phone number<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Your phone number"/><small className="private-note">Only the official NaijaConnect admin can see your phone number.</small></label><label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your photo, bio, interests and details are now visible to signed-in members.</span></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
 }
 
-function SettingsPage({ user, signOut }: { user: any; signOut: () => void }) {
+function SettingsPage({ user, signOut, onDeleteAccount }: { user: any; signOut: () => void; onDeleteAccount: () => Promise<void> }) {
   return (
     <section className="content-page">
       <div className="page-heading">
@@ -940,7 +951,18 @@ function SettingsPage({ user, signOut }: { user: any; signOut: () => void }) {
               <small>End your current session.</small>            </span>
             <ChevronRight />
           </button>
-        )}      </div>
+        )}
+        {user && (
+          <button className="danger-row account-delete-row" onClick={onDeleteAccount}>
+            <X />
+            <span>
+              <strong>Delete my account</strong>
+              <small>Permanently remove your NaijaConnect account and profile.</small>
+            </span>
+            <ChevronRight />
+          </button>
+        )}
+      </div>
     </section>
   );
 }
@@ -1014,9 +1036,18 @@ function AdminPage(){
   useEffect(()=>{loadUsers();},[]);
   const select=async(u:any)=>{setSelected(u);setStatus('');await loadThread(u.id);};
   const send=async()=>{if(!selected||!text.trim())return;try{await api.post('/api/admin/messages',{userId:selected.id,text:text.trim()});setText('');setStatus('Message sent.');await loadThread(selected.id);}catch(e:any){setStatus(e?.message||'Could not send the admin message.');}};
+  const deleteUser=async(u:any)=>{
+    if(!window.confirm('Delete '+(u.name||'this member')+' permanently? This removes their account, profile and related member data. This cannot be undone.')) return;
+    try{
+      await api.post('/api/admin/delete-user',{userId:u.id});
+      setUsers(old=>old.filter(x=>x.id!==u.id));
+      if(selected?.id===u.id){setSelected(null);setMessages([]);}
+      setStatus('Member account deleted.');
+    }catch(e:any){setStatus(e?.message||'Could not delete this member.');}
+  };
   return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>Admin Inbox</h1><p>Only the official NaijaConnect admin can start conversations. Members can reply only to the admin.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div>
     <div className="admin-layout">
-      <div className="admin-requests">{users.map(u=><button className={selected?.id===u.id?'admin-request active':'admin-request'} key={u.id} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button>)}{!users.length&&<div className="empty-mini">No member profiles yet.</div>}</div>
+      <div className="admin-requests">{users.map(u=><div className="admin-member-row" key={u.id}><button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)} aria-label={'Delete '+(u.name||'member')} title="Delete member">Delete</button></div>)}{!users.length&&<div className="empty-mini">No member profiles yet.</div>}</div>
       <div className="admin-chat">{selected?<><div className="admin-chat-head"><ShieldCheck/><span><strong>NaijaConnect Admin</strong><small>Official admin → {selected.name}</small></span></div><div className="admin-thread">{messages.map(m=><div key={m.id} className={m.senderType==='admin'?'admin-bubble mine':'admin-bubble'}><small>{m.senderType==='admin'?'ADMIN':selected.name}</small><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}{!messages.length&&<div className="empty-mini">No messages yet. Start the conversation.</div>}</div><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message to this member…"/><button className="primary" onClick={send}>Send as Admin</button></>:<div className="empty-mini">Select any member to message them.</div>}{status&&<small className="admin-status">{status}</small>}</div>
     </div>
   </section>;
