@@ -219,6 +219,12 @@ function App() {
   useEffect(() => {
     const syncRoute = () => {
       const next = route();
+      if (next === '/community' || next === '/posts') {
+        window.location.hash = '#/discover';
+        setPath('/discover');
+        setLoading(false);
+        return;
+      }
       setPath(next);
       if (next === '/login' || next === '/') setLoading(false);
     };
