@@ -198,3 +198,633 @@ function App() {
       setNotice(
         'Some live data could not be loaded yet. Demo profiles remain available.'
       );
+    } finally {
+      setLoading(false);
+    }
+  };  useEffect(() => {
+    refresh();
+    const on = () => refresh();
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  useEffect(() => {
+    if (notice) {
+      const t = setTimeout(() => setNotice(''), 3500);
+      return () => clearTimeout(t);
+    }
+  }, [notice]);
+
+  const signIn = async () => {
+    try {
+      await auth.signIn({ scope: 'openid email profile offline_access' });
+      await refresh();
+      go('/discover');
+    } catch (e: any) {
+      setNotice(
+        e?.code === 'popup_blocked'
+          ? 'Please allow popups to sign in.'
+          : 'Sign-in was cancelled or failed.'
+      );
+    }
+  };
+  const signOut = async () => {
+    await auth.signOut();
+    setUser(null);
+    setProfile(null);
+    setMatches([]);
+    setPosts([]);
+    go('/');
+  };
+
+  const like = async (id: string) => {
+    if (!user) {
+      setNotice('Sign in to like and match with people.');
+      go('/login');
+      return;
+    }
+    try {
+      const r = await api.post('/api/likes', { profileId: id });
+      setNotice(r.data.matched ? 'It’s a mutual connection!' : 'Interested sent.');
+      await refresh();
+    } catch {
+      setNotice('Could not send the like. Please try again.');
+    }
+  };
+
+  const connectToAdmin = async (p: Profile) => {
+    try { await api.post('/api/connection-requests', { profileId: p.id, profileName: p.name }); } catch {}
+    if (ADMIN_EMAIL === 'ADMIN_EMAIL_PENDING') { setNotice('The admin email still needs to be configured.'); return; }
+    const subject = encodeURIComponent(`NaijaConnect connection request: ${p.name}, ${p.age}`);
+    const body = encodeURIComponent(`Hello NaijaConnect Admin,\n\nI am interested in connecting with ${p.name}, age ${p.age}, from ${p.city}, ${p.country}.\n\nProfile ID: ${p.id}\n\nPlease help connect us.\n\nThank you.`);
+    window.location.href = `mailto:${ADMIN_EMAIL}?subject=${subject}&body=${body}`;
+  };
+  const createPost = async (text:string, photoData:string, photoType:string) => { try { const r = await api.post('/api/posts', {text, photoData, photoContentType:photoType}); setPosts(old => [r.data.post, ...old]); setNotice('Post published.'); } catch { setNotice('Could not publish the post.'); } };
+  const path = route();
+  const publicPages =
+    path === '/' || path === '/login' || path.startsWith('/profile/');
+  if (loading)
+    return (
+      <div className="loading-screen">
+        <div className="brand-mark">N</div>
+        <h2>NaijaConnect</h2>
+        <p>Getting things ready…</p>
+      </div>
+    );
+
+  return (
+    <div className="app-shell">
+      <Header user={user} profile={profile} signIn={signIn} signOut={signOut} />
+      {notice && <div className="toast">{notice}</div>}
+      <main className="page-wrap">
+        {path === '/' && <Home user={user} signIn={signIn} />}
+        {path === '/login' && <Login signIn={signIn} />}
+        {path === '/discover' && <Discover profiles={profiles} onLike={like} />}
+        {path === '/posts' && <Posts posts={posts} onCreatePost={createPost} user={user} />}
+        {path.startsWith('/profile/') && (
+          <ProfilePage
+            id={path.split('/')[2]}
+            profiles={profiles}
+            user={user}
+            onLike={like}
+            onConnect={connectToAdmin}
+          />
+        )}
+        {path === '/admin' && isAdminUser(user) && <AdminPage />}
+        {path === '/admin-messages' && user && <AdminMessages />}
+        {path === '/profile' && (
+          <MyProfile user={user} profile={profile} onSaved={refresh} />
+        )}
+        {path === '/settings' && <SettingsPage user={user} signOut={signOut} />}
+        {path === '/safety' && <SafetyPage />}
+      </main>
+
+    </div>
+  );
+}
+
+function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;signIn:()=>void;signOut:()=>void}) {
+  const [open,setOpen]=useState(false);
+  const admin=isAdminUser(user);
+  return <header className="topbar">
+    <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
+    <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/posts')}>Posts</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
+    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={signIn}><LogIn size={17}/> Sign in</button>}</div>
+    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/posts')}}><MessageCircle size={17}/> Community Posts</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
+  </header>;
+}
+
+function Home({ user, signIn }: { user: any; signIn: () => void }) {
+  return (
+    <section className="home-page">
+      <div className="hero-card">
+        <div className="eyebrow">
+          <span className="pulse"></span> NIGERIAN-FIRST CONNECTIONS
+        </div>
+        <h1>
+          Meet someone.          <br />
+          <em>Make it real.</em>        </h1>
+        <p>
+          Connect with Nigerians near you and around the world. Discover people,
+          find a mutual match and start a conversation.
+        </p>
+        <div className="hero-actions">
+          <button className="primary" onClick={() => go('/discover')}>
+            Discover people <ChevronRight size={18} />
+          </button>
+          {!user && (
+            <button className="secondary" onClick={signIn}>
+              Create your profile
+            </button>
+          )}
+        </div>
+        <div className="hero-points">
+          <span>
+            <ShieldCheck size={17} /> Safety tools
+          </span>
+          <span>
+            <MapPin size={17} /> Nigeria first
+          </span>
+          <span>
+            <MessageCircle size={17} /> Private chat
+          </span>
+        </div>
+      </div>
+      <div className="feature-grid">
+        <Feature
+          icon={<Compass />}
+          title="Discover"
+          text="Browse profiles by city, age and interests."
+          action={() => go('/discover')}
+        />
+        <Feature
+          icon={<Heart />}
+          title="Interested"
+          text="Show interest in profiles you like."
+          action={() => go('/discover')}
+        />
+        <Feature
+          icon={<MessageCircle />}
+          title="Message"
+          text="Contact the NaijaConnect admin for an introduction."
+          action={() => go('/discover')}
+        />
+        <Feature
+          icon={<ShieldCheck />}
+          title="Stay safe"
+          text="Block, report and control your privacy."
+          action={() => go('/safety')}
+        />
+      </div>
+      <div className="country-strip">
+        <strong>Nigeria</strong>
+        <span>•</span>
+        <span>Worldwide discovery</span>
+        <span>•</span>
+        <span>18+ only</span>
+      </div>
+    </section>
+  );
+}
+
+function Feature({
+  icon,
+  title,
+  text,
+  action,
+}: {
+  icon: any;
+  title: string;
+  text: string;
+  action: () => void;
+}) {
+  return (
+    <button className="feature-card" onClick={action}>
+      <span className="feature-icon">{icon}</span>
+      <span>
+        <strong>{title}</strong>
+        <small>{text}</small>
+      </span>
+      <ChevronRight />
+    </button>
+  );
+}
+
+function Login({ signIn }: { signIn: () => void }) {
+  return (
+    <section className="center-page">
+      <div className="auth-card">
+        <div className="brand-large">N</div>
+        <h1>Welcome to NaijaConnect</h1>
+        <p>Sign in to create your profile, like people, match and chat.</p>
+        <button className="primary full" onClick={signIn}>
+          <LogIn size={18} /> Continue with secure sign-in
+        </button>
+        <small className="legal">
+          By continuing, you confirm that you are 18 or older and agree to use
+          the platform respectfully.
+        </small>
+      </div>
+    </section>
+  );
+}
+
+function Discover({profiles,onLike}:{profiles:Profile[],onLike:(id:string)=>void}){
+  const [city,setCity]=useState('All Nigeria'); const [gender,setGender]=useState('Everyone'); const [maxAge,setMaxAge]=useState(45); const [query,setQuery]=useState('');
+  const nearby=false;
+  const filtered=useMemo(()=>profiles.filter(p=>
+    (!nearby || p.distanceKm !== undefined) &&
+    (city==='All Nigeria' ? p.country==='Nigeria' : city==='Worldwide' || city==='Nearby' ? true : p.city===city) &&
+    (gender==='Everyone'||p.gender===gender) && p.age<=maxAge &&
+    (!query || (p.name+' '+p.city+' '+p.interests.join(' ')).toLowerCase().includes(query.toLowerCase()))
+  ),[profiles,city,gender,maxAge,query,nearby]);
+  return <section className="content-page">
+    <div className="page-heading"><div><span className="eyebrow">DISCOVER</span><h1>People</h1><p>Browse member profiles. Everyone with an account can discover new members.</p></div><button className="outline-btn" onClick={()=>go('/settings')}><SlidersHorizontal size={17}/> Preferences</button></div>
+    <div className="filter-panel"><label><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search name, city or interest"/></label><select value={city} onChange={e=>setCity(e.target.value)}><option>All Nigeria</option><option>Lagos</option><option>Abuja</option><option>Port Harcourt</option><option>Calabar</option><option>Kano</option><option>Worldwide</option></select><select value={gender} onChange={e=>setGender(e.target.value)}><option>Everyone</option><option>Woman</option><option>Man</option></select><select value={maxAge} onChange={e=>setMaxAge(Number(e.target.value))}><option value="25">18–25</option><option value="35">18–35</option><option value="45">18–45</option><option value="60">18–60</option></select></div>
+      <div className="profile-grid">{filtered.map(p=><ProfileCard key={p.id} p={p} onLike={onLike}/>)}{!filtered.length&&<Empty title="No people found" text="Try widening your filters or exploring worldwide."/>}</div>
+  </section>
+}
+
+function ProfileCard({p,onLike}:{p:Profile,onLike:(id:string)=>void}){
+  return <article className="profile-card">
+    <button className="profile-photo" onClick={()=>go('/profile/'+p.id)}>{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i></button>
+    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.verified&&<ShieldCheck size={15}/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?`${p.distanceKm.toFixed(1)} km away`:`${p.city}, ${p.country}`}</span><p>{p.bio}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className="like-btn" onClick={()=>onLike(p.id)}><Heart size={17}/> Interested</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
+  </article>
+}
+
+function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Profile[],user:any,onLike:(id:string)=>void,onConnect:(p:Profile)=>void}){
+  const p=profiles.find(x=>x.id===id)||demoProfiles.find(x=>x.id===id);
+  if(!p)return <Empty title="Profile not found" text="This profile may have been removed." action={()=>go('/discover')} actionText="Back to discover"/>;
+  return <section className="detail-page"><button className="back-link" onClick={()=>go('/discover')}>← Back to discover</button><div className="profile-detail">
+    <div className="detail-photo">{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}</div>
+    <div className="detail-copy"><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'} {p.verified&&' • VERIFIED'}</div><h1>{p.name}, {p.age}</h1><div className="detail-location"><MapPin size={18}/>{p.distanceKm!==undefined?`${p.distanceKm.toFixed(1)} km away`:`${p.city}, ${p.country}`}</div><p className="big-bio">{p.bio||'This member has not added a bio yet.'}</p><div className="detail-section"><h3>About</h3><p>{p.city}, {p.country} • {p.age} years old</p></div><div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div><div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div><div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18}/> Interested</button><button className="icon-square" onClick={()=>go('/safety')} aria-label="Safety options"><MoreHorizontal/></button></div><p className="connect-note">Tap Connect to email the NaijaConnect admin and request an introduction to this profile.</p></div>
+  </div></section>
+}
+
+function Matches({ matches }: { matches: Match[] }) {
+  return (
+    <section className="content-page">
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">MATCHES</span>
+          <h1>Your mutual connections</h1>
+          <p>When you both like each other, the connection appears here.</p>
+        </div>
+      </div>
+      {matches.length ? (
+        <div className="list-stack">
+          {matches.map(m => (
+            <button
+              className="match-row"
+              key={m.id}
+              onClick={() => go('/messages/' + m.profile.id)}
+            >
+              <Avatar p={m.profile} />
+              <span>
+                <strong>
+                  {m.profile.name}, {m.profile.age}
+                </strong>
+                <small>
+                  {m.profile.city}, {m.profile.country}
+                </small>
+              </span>
+              <MessageCircle />
+              <ChevronRight />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <Empty
+          title="No matches yet"
+          text="Start discovering people and send a few likes."
+          action={() => go('/discover')}
+          actionText="Discover people"
+        />
+      )}
+    </section>
+  );
+}
+
+function Messages({ user, profiles }: { user: any; profiles: Profile[] }) {
+  if (!user)
+    return (
+      <Empty
+        title="Sign in to see messages"
+        text="Your private conversations will appear here."
+        action={() => go('/login')}
+        actionText="Sign in"
+      />
+    );
+  return (
+    <section className="content-page">
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">MESSAGES</span>
+          <h1>Your conversations</h1>          <p>Private conversations with your matches.</p>
+        </div>
+      </div>      <div className="list-stack">
+        {profiles.slice(0, 3).map(p => (
+          <button
+            className="match-row"
+            key={p.id}
+            onClick={() => go('/messages/' + p.id)}
+          >
+            <Avatar p={p} />
+            <span>
+              <strong>{p.name}</strong>
+              <small>
+                {p.online ? 'Online now' : 'Tap to open conversation'}
+              </small>
+            </span>
+            <MessageCircle />
+            <ChevronRight />
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ChatPage({
+  user,
+  profileId,
+  profiles,
+}: {
+  user: any;
+  profileId: string;
+  profiles: Profile[];
+}) {
+  const p =
+    profiles.find(x => x.id === profileId) ||
+    demoProfiles.find(x => x.id === profileId);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [text, setText] = useState('');
+  const connRef = useRef<any>(null);
+  useEffect(() => {
+    if (!user || !p) return;
+    let active = true;
+    (async () => {
+      try {
+        const r = await api.get('/api/messages/' + p.id);
+        if (active) setMessages(r.data.messages || []);
+      } catch {}
+    })();
+    const conn = ws.connect();
+    connRef.current = conn;
+    conn.onMessage((m: any) => {
+      if (
+        m?.type === 'entity.update' &&
+        m.payload?.entity_type === 'conversation' &&
+        m.payload?.entity_id === p.id
+      ) {
+        setMessages(old => [...old, m.payload.data]);
+      }
+    });
+    conn.ready.then(() => {
+      if (conn.connectionId)
+        api.post('/api/subscriptions', {
+          entity_type: 'conversation',
+          entity_id: p.id,
+          connection_id: conn.connectionId,
+        });
+    });
+    return () => {
+      connRef.current?.disconnect();
+    };
+  }, [user, p?.id]);
+  if (!user)
+    return (
+      <Empty
+        title="Sign in to chat"
+        text="Create an account to start private conversations."
+        action={() => go('/login')}
+        actionText="Sign in"
+      />
+    );
+  if (!p)
+    return (
+      <Empty
+        title="Conversation unavailable"
+        text="This profile is no longer available."
+        action={() => go('/messages')}
+        actionText="Back to messages"
+      />
+    );
+  const send = async () => {
+    const clean = text.trim();
+    if (!clean) return;
+    setText('');
+    try {
+      const r = await api.post('/api/messages', {
+        receiverId: p.userId,
+        text: clean,
+      });
+      setMessages(old => [...old, r.data.message]);
+    } catch {}
+  };
+  return (
+    <section className="chat-page">
+      <button className="back-link" onClick={() => go('/messages')}>
+        ← Back to messages
+      </button>
+      <div className="chat-header">
+        <Avatar p={p} />
+        <span>
+          <strong>
+            {p.name}, {p.age}
+          </strong>
+          <small>
+            {p.city} • {p.online ? 'Online' : 'Offline'}
+          </small>
+        </span>
+      </div>
+      <div className="chat-body">
+        {messages.length ? (
+          messages.map(m => (
+            <div
+              key={m.id}
+              className={m.senderId === user.userId ? 'bubble mine' : 'bubble'}
+            >
+              {m.text}
+            </div>
+          ))
+        ) : (
+          <div className="chat-empty">Start the conversation respectfully.</div>
+        )}
+      </div>
+      <div className="chat-compose">
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') send();
+          }}
+          placeholder="Write a message…"
+        />
+        <button className="primary" onClick={send}>
+          Send
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved:()=>void}){
+  const [name,setName]=useState(profile?.name||user?.name||''); const [age,setAge]=useState(String(profile?.age||25)); const [gender,setGender]=useState(profile?.gender||''); const [city,setCity]=useState(profile?.city||''); const [bio,setBio]=useState(profile?.bio||''); const [lookingFor,setLookingFor]=useState(profile?.lookingFor||'Dating / connection'); const [interests,setInterests]=useState(profile?.interests.join(', ')||''); const [photo,setPhoto]=useState(profile?.photo||''); const [photoData,setPhotoData]=useState(''); const [savedProfileId,setSavedProfileId]=useState<string|null>(profile?.id||null); const [saved,setSaved]=useState(false); const [photoType,setPhotoType]=useState('image/jpeg'); const [location,setLocation]=useState(profile?.latitude!==undefined&&profile?.longitude!==undefined?{latitude:profile.latitude,longitude:profile.longitude}:null); const [saving,setSaving]=useState(false); const [locating,setLocating]=useState(false);
+  if(!user)return <Empty title="Create your profile" text="Sign in to create a profile that other members can discover." action={()=>go('/login')} actionText="Sign in"/>;
+  const pickPhoto=(file?:File)=>{if(!file)return;if(!file.type.startsWith('image/'))return;if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}const reader=new FileReader();reader.onload=()=>{const value=String(reader.result||'');setPhotoData(value.includes(',')?value.split(',')[1]:value);setPhoto(value);setPhotoType(file.type);};reader.readAsDataURL(file);};
+  const save=async()=>{if(!name.trim()||Number(age)<18||!city.trim()){alert('Name, age 18+ and city are required.');return;}setSaving(true);setSaved(false);try{const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),photoData,photoContentType:photoType});if(r.data.profile){setSavedProfileId(r.data.profile.id);setPhoto(r.data.profile.photo||photo);setPhotoData('');setSaved(true);await onSaved();}}catch{alert('Could not save your profile. Please try again.');}finally{setSaving(false);}};
+  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Your photo, bio, interests and what you are looking for will appear on your public profile for signed-in members to discover.</p></div></div><div className="form-card"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="upload-label">Profile photo<input type="file" accept="image/*" onChange={e=>pickPhoto(e.target.files?.[0])}/><small>Your selected photo appears above immediately. Images up to 25 MB are supported.</small></label><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label>About you<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div><strong>Your profile has been saved.</strong><small>Your photo, bio, interests and details are now visible to signed-in members.</small></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
+}
+
+function SettingsPage({ user, signOut }: { user: any; signOut: () => void }) {
+  return (
+    <section className="content-page">
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">SETTINGS</span>
+          <h1>Account & preferences</h1>
+          <p>Control how you use NaijaConnect.</p>
+        </div>
+      </div>
+      <div className="settings-list">
+        <button onClick={() => go('/profile')}>
+          <UserRound />
+          <span>
+            <strong>Edit profile</strong>
+            <small>Update your bio, city and interests.</small>
+          </span>
+          <ChevronRight />
+        </button>
+        <button onClick={() => go('/safety')}>
+          <ShieldCheck />
+          <span>
+            <strong>Safety & privacy</strong>
+            <small>Learn about blocking, reporting and privacy.</small>
+          </span>
+          <ChevronRight />
+        </button>
+        <button onClick={() => go('/discover')}>
+          <SlidersHorizontal />
+          <span>
+            <strong>Discovery preferences</strong>
+            <small>Adjust who you want to see.</small>
+          </span>
+          <ChevronRight />
+        </button>
+        {user && (
+          <button className="danger-row" onClick={signOut}>
+            <LogOut />
+            <span>
+              <strong>Sign out</strong>
+              <small>End your current session.</small>            </span>
+            <ChevronRight />
+          </button>
+        )}      </div>
+    </section>
+  );
+}
+
+function SafetyPage() {
+  return (
+    <section className="content-page">
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">SAFETY</span>
+          <h1>Connect safely</h1>
+          <p>
+            Real people deserve real boundaries. Keep personal information
+            private until you trust someone.
+          </p>
+        </div>
+      </div>
+      <div className="safety-grid">
+        <div>
+          <ShieldCheck />
+          <h3>Block</h3>
+          <p>Stop another member from contacting you.</p>
+        </div>
+        <div>
+          <Bell />
+          <h3>Report</h3>
+          <p>Report suspicious, abusive or inappropriate behaviour.</p>
+        </div>
+        <div>
+          <UserRound />
+          <h3>Protect your privacy</h3>
+          <p>
+            Do not share passwords, bank details or sensitive documents in chat.
+          </p>
+        </div>
+        <div>
+          <Check />
+          <h3>18+ community</h3>
+          <p>NaijaConnect is for adults only. Be respectful and consensual.</p>
+        </div>
+      </div>
+      <button className="primary" onClick={() => go('/discover')}>
+        Back to discovery
+      </button>
+    </section>
+  );
+}
+
+function Avatar({ p }: { p: Profile }) {
+  return (
+    <span className="avatar">
+      {p.photo ? (
+        <img src={p.photo} alt="" />
+      ) : (
+        <span style={{ background: avatarColor(p.name) }}>
+          {initials(p.name)}
+        </span>
+      )}
+    </span>
+  );
+}
+function AdminPage(){
+  const [requests,setRequests]=useState<any[]>([]); const [selected,setSelected]=useState<any>(null); const [text,setText]=useState(''); const [status,setStatus]=useState('');
+  useEffect(()=>{(async()=>{try{const r=await api.get('/api/admin/requests');setRequests(r.data.requests||[]);}catch{setStatus('Admin email is not configured yet.');}})();},[]);
+  const send=async()=>{if(!selected||!text.trim())return;try{await api.post('/api/admin/messages',{userId:selected.userId,text:text.trim()});setText('');setStatus('Message sent as Admin.');}catch{setStatus('Could not send the admin message.');}};
+  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>Admin Inbox</h1><p>Only the recognized admin can send messages to members.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div><div className="admin-layout"><div className="admin-requests">{requests.map(r=><button className={selected?.id===r.id?'admin-request active':'admin-request'} key={r.id} onClick={()=>setSelected(r)}><strong>{r.userName}</strong><small>{r.email||'Member'}</small><small>{r.profileName}</small></button>)}{!requests.length&&<div className="empty-mini">No connection requests yet.</div>}</div><div className="admin-chat">{selected?<><div className="admin-chat-head"><ShieldCheck/><span><strong>NaijaConnect Admin</strong><small>Official admin account → {selected.userName}</small></span></div><p className="admin-context">Interested in <strong>{selected.profileName}</strong></p><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message to this member…"/><button className="primary" onClick={send}>Send as Admin</button></>:<div className="empty-mini">Select a connection request.</div>}{status&&<small className="admin-status">{status}</small>}</div></div></section>;
+}
+
+function AdminMessages(){
+  const [messages,setMessages]=useState<any[]>([]);
+  useEffect(()=>{(async()=>{try{const r=await api.get('/api/admin/messages');setMessages(r.data.messages||[]);}catch{}})();},[]);
+  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">MESSAGES</span><h1>Admin Messages</h1><p>Only official NaijaConnect Admin messages appear here.</p></div></div><div className="admin-message-list">{messages.map(m=><article className="admin-message" key={m.id}><div className="admin-message-head"><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span><small>{new Date(m.createdAt).toLocaleString()}</small></div><p>{m.text}</p></article>)}{!messages.length&&<div className="empty-mini">No admin messages yet.</div>}</div></section>;
+}
+
+function Posts({posts,onCreatePost,user}:{posts:Post[],onCreatePost:(text:string,photoData:string,photoType:string)=>Promise<void>,user:any}){
+  const [text,setText]=useState(''); const [photo,setPhoto]=useState(''); const [photoType,setPhotoType]=useState('image/jpeg'); const [busy,setBusy]=useState(false);
+  const pick=(file?:File)=>{if(!file)return;if(!file.type.startsWith('image/')){alert('Please choose an image file.');return;}if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}const reader=new FileReader();reader.onload=()=>{setPhoto(String(reader.result||''));setPhotoType(file.type);};reader.readAsDataURL(file);};
+  const publish=async()=>{if(!text.trim()&&!photo)return;setBusy(true);try{await onCreatePost(text.trim(),photo.includes(',')?photo.split(',')[1]:photo,photoType);setText('');setPhoto('');}finally{setBusy(false);}};
+  if(!user)return <Empty title="Sign in to view posts" text="Members can share text and photos with the NaijaConnect community." action={()=>go('/login')} actionText="Sign in"/>;
+  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">COMMUNITY</span><h1>Posts</h1><p>Every new post is visible to signed-in members. No device location is required.</p></div></div><div className="post-composer"><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Share something with the community…"/><div className="post-compose-row"><label className="photo-picker">Add photo<input type="file" accept="image/*" onChange={e=>pick(e.target.files?.[0])}/></label><button className="primary" disabled={busy||(!text.trim()&&!photo)} onClick={publish}>{busy?'Posting…':'Post'}</button></div>{photo&&<img className="post-preview" src={photo} alt="Preview"/>}</div><div className="post-feed">{posts.map(p=><article className="post-card" key={p.id}><div className="post-author"><Avatar p={p.author}/><span><strong>{p.author.name}, {p.author.age}</strong><small>{p.author.city}, {p.author.country} • {new Date(p.createdAt).toLocaleString()}</small></span></div>{p.text&&<p className="post-text">{p.text}</p>}{p.photo&&<img className="post-image" src={p.photo} alt="Community post"/>}<button className="post-profile-link" onClick={()=>go('/profile/'+p.author.id)}>View {p.author.name}'s profile <ChevronRight size={15}/></button></article>)}{!posts.length&&<Empty title="No posts yet" text="Be the first member to share something."/>}</div></section>
+}
+
+function Empty({
+  title,
+  text,
+  action,
+  actionText,
+}: {
+  title: string;
+  text: string;
+  action?: () => void;
+  actionText?: string;
+}) {
+  return (
+    <div className="empty">
+      <div className="empty-icon">♡</div>
+      <h2>{title}</h2>
+      <p>{text}</p>
+      {action && (
+        <button className="primary" onClick={action}>
+          {actionText}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default App;
