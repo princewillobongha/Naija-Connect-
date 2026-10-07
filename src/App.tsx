@@ -311,14 +311,19 @@ function App() {
       const subject = 'NaijaConnect Introduction Request';
       const memberName = profile?.name || user?.name || user?.email?.split('@')[0] || 'NaijaConnect member';
       const body = [
-        'Hello NaijaConnect Admin,',
+        'Dear NaijaConnect Administration,',
         '',
-        'I would like to request an introduction to ' + p.name + '.',
+        'I hope this message finds you well.',
         '',
-        'My name: ' + memberName,
-        'My email: ' + (user?.email || ''),
+        'I am writing to request an introduction to ' + p.name + ', whom I am interested in connecting with through NaijaConnect.',
         '',
-        'Please assist with the introduction through NaijaConnect.',
+        'My details:',
+        'Name: ' + memberName,
+        'Email: ' + (user?.email || ''),
+        '',
+        'I would appreciate your assistance in facilitating this introduction through the NaijaConnect platform.',
+        '',
+        'Thank you for your time and assistance. I look forward to hearing from you.',
         '',
         'Kind regards,',
         memberName
