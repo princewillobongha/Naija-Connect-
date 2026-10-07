@@ -248,19 +248,26 @@ function App() {
     }
   }, [notice]);
 
-  const signIn = async (email?: string) => {
+  const signIn = async (email?: string, password?: string) => {
     try {
-      await auth.signIn({ email });
-      setNotice('Secure sign-in link sent. Check your inbox to continue.');
+      await auth.signInWithPassword(String(email || ''), String(password || ''));
+      setNotice('You are signed in successfully.');
       return { ok: true, message: '' };
     } catch (e: any) {
-      const message = String(e?.message || '');
-      const rateLimited = /rate limit|too many requests|429|over_email_send_rate_limit|over_request_rate_limit/i.test(message);
-      const friendly = rateLimited
-        ? 'Email sending is temporarily rate-limited. Please wait before requesting another link. You do not need to create another account.'
-        : message || 'Sign-in could not be completed. Please try again.';
-      setNotice(friendly);
-      return { ok: false, message: friendly };
+      const message = String(e?.message || 'Sign-in could not be completed.');
+      setNotice(message);
+      return { ok: false, message };
+    }
+  };
+  const signUp = async (email: string, password: string) => {
+    try {
+      const data = await auth.signUpWithPassword(email, password);
+      setNotice(data?.session ? 'Account created successfully.' : 'Account created. Please check your email if confirmation is required.');
+      return { ok: true, message: '' };
+    } catch (e: any) {
+      const message = String(e?.message || 'Account creation could not be completed.');
+      setNotice(message);
+      return { ok: false, message };
     }
   };
   const signOut = async () => {
@@ -332,10 +339,10 @@ function App() {
       <Header user={user} profile={profile} signIn={signIn} signOut={signOut} />
       {notice && <div className="toast">{notice}</div>}
       <main className="page-wrap">
-        {!user && protectedPage && <Login signIn={signIn} />}
+        {!user && protectedPage && <Login signIn={signIn} signUp={signUp} />}
         {user && path === '/' && <Home user={user} signIn={signIn} />}
         {path === '/' && !user && <Home user={user} signIn={signIn} />}
-        {path === '/login' && <Login signIn={signIn} />}
+        {path === '/login' && <Login signIn={signIn} signUp={signUp} />}
         {user && path === '/discover' && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
         {user && (path === '/posts' || path === '/community') && <Posts posts={posts} onCreatePost={createPost} onLikePost={async(id)=>{try{const r=await api.post('/api/post-likes',{postId:id});setPosts(old=>old.map(p=>p.id===id?{...p,likes:r.data.likes,likedByMe:r.data.liked}:p));}catch{setNotice('Could not update the reaction.');}}} onComment={async(id,text)=>{try{const r=await api.post('/api/post-comments',{postId:id,text});setPosts(old=>old.map(p=>p.id===id?{...p,comments:[...(p.comments||[]),r.data.comment]}:p));}catch{setNotice('Could not add your comment.');}}} />}
         {path.startsWith('/profile/') && (
@@ -468,67 +475,46 @@ function Feature({
   );
 }
 
-function Login({ signIn }: { signIn: (email?: string) => Promise<{ok:boolean;message:string}> }) {
+function Login({ signIn, signUp }: { signIn: (email?: string, password?: string) => Promise<{ok:boolean;message:string}>; signUp: (email:string,password:string) => Promise<{ok:boolean;message:string}> }) {
+  const [mode,setMode]=useState<'signin'|'signup'>('signin');
   const [email,setEmail]=useState('');
-  const [sent,setSent]=useState(false);
+  const [password,setPassword]=useState('');
+  const [confirm,setConfirm]=useState('');
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
-  const [cooldown,setCooldown]=useState(()=>{
-    try { return Math.max(0, Math.ceil((Number(sessionStorage.getItem('naija_connect_auth_cooldown')||0)-Date.now())/1000)); }
-    catch { return 0; }
-  });
-  useEffect(()=>{
-    if(cooldown<=0)return;
-    const t=window.setInterval(()=>setCooldown(v=>{
-      const next=Math.max(0,v-1);
-      if(next===0){try{sessionStorage.removeItem('naija_connect_auth_cooldown')}catch{}}
-      return next;
-    }),1000);
-    return()=>window.clearInterval(t);
-  },[cooldown]);
+
   const submit=async()=>{
     const clean=email.trim();
-    if(!/^\S+@\S+\.\S+$/.test(clean)||busy||cooldown>0)return;
-    setBusy(true); setError('');
+    setError('');
+    if(!/^\S+@\S+\.\S+$/.test(clean)){setError('Enter a valid email address.');return;}
+    if(password.length<8){setError('Password must be at least 8 characters.');return;}
+    if(mode==='signup' && password!==confirm){setError('Passwords do not match.');return;}
+    if(busy)return;
+    setBusy(true);
     try{
-      const result=await signIn(clean);
-      if(result.ok){
-        setSent(true);
-        const until=Date.now()+60000;
-        setCooldown(60);
-        try{sessionStorage.setItem('naija_connect_auth_cooldown',String(until))}catch{}
-      } else {
-        setError(result.message);
-        if(/rate limit|too many requests|429|over_email_send_rate_limit|over_request_rate_limit/i.test(result.message)){
-          const until=Date.now()+60000;
-          setCooldown(60);
-          try{sessionStorage.setItem('naija_connect_auth_cooldown',String(until))}catch{}
-        }
-      }
-    } catch(e:any) {
-      setError(e?.message||'Sign-in could not be completed. Please try again.');
+      const result = mode==='signin' ? await signIn(clean,password) : await signUp(clean,password);
+      if(!result.ok) setError(result.message);
     } finally { setBusy(false); }
   };
+
   return (
     <section className="center-page">
       <div className="auth-card auth-card-professional">
         <div className="brand-large">N</div>
         <span className="eyebrow auth-eyebrow">SECURE MEMBER ACCESS</span>
-        <h1>Welcome to NaijaConnect</h1>
-        <p>Sign in with your email. We’ll send you a secure one-time link — no password to remember.</p>
-        {error && <div className="auth-error" role="alert"><strong>We couldn't send the link.</strong><span>{error}</span></div>}
-        {!sent ? <>
-          <label className="email-field"><span>Email address</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="you@example.com" autoComplete="email"/></label>
-          <button type="button" className="primary full auth-submit" disabled={busy||cooldown>0||!/^\S+@\S+\.\S+$/.test(email.trim())} onClick={submit}>
-            {busy ? 'Sending secure link…' : cooldown>0 ? `Please wait ${cooldown}s` : <><LogIn size={18}/> Send secure sign-in link</>}
-          </button>
-        </> : <div className="email-sent">
-          <div className="email-sent-icon">✓</div><strong>Check your email</strong>
-          <p>We sent a secure NaijaConnect sign-in link to <b>{email}</b>.</p>
-          <p className="auth-help">If you do not receive it, check Spam/Junk. Avoid repeatedly requesting links because email providers enforce sending limits.</p>
-          <button type="button" className="secondary full" disabled={cooldown>0} onClick={()=>setSent(false)}>{cooldown>0?`Try again in ${cooldown}s`:'Use a different email'}</button>
-        </div>}
-        <div className="auth-security"><ShieldCheck size={16}/><span>Your email is used only for account access.</span></div>
+        <h1>{mode==='signin'?'Welcome back':'Create your NaijaConnect account'}</h1>
+        <p>{mode==='signin'?'Sign in with your email and password.':'Create a secure account with your email and password.'}</p>
+        {error && <div className="auth-error" role="alert"><strong>We couldn't complete that.</strong><span>{error}</span></div>}
+        <label className="email-field"><span>Email address</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/></label>
+        <label className="email-field"><span>Password</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="At least 8 characters" autoComplete={mode==='signin'?'current-password':'new-password'}/></label>
+        {mode==='signup' && <label className="email-field"><span>Confirm password</span><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="Enter your password again" autoComplete="new-password"/></label>}
+        <button type="button" className="primary full auth-submit" disabled={busy} onClick={submit}>
+          {busy ? (mode==='signin'?'Signing in…':'Creating account…') : (mode==='signin'?<><LogIn size={18}/> Sign in</>:<>Create account <ChevronRight size={18}/></>)}
+        </button>
+        <button type="button" className="secondary full" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setError('');}}>
+          {mode==='signin'?'New to NaijaConnect? Create an account':'Already have an account? Sign in'}
+        </button>
+        <div className="auth-security"><ShieldCheck size={16}/><span>Your password is securely handled by Supabase Auth.</span></div>
         <small className="legal">By continuing, you confirm that you are 18 or older and agree to use the platform respectfully.</small>
       </div>
     </section>
