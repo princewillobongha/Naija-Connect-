@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const supabase = createClient(url, key);
-const ADMIN_EMAIL = import.meta.env.VITE_NAIJA_CONNECT_ADMIN_EMAIL || '';
+const ADMIN_EMAIL = (import.meta.env.VITE_NAIJA_CONNECT_ADMIN_EMAIL || 'cinddycook@gmail.com').trim();
 
 async function currentUser() {
   const { data } = await supabase.auth.getUser();
@@ -66,12 +66,12 @@ async function getPosts() {
 export const auth = {
   async getUser(){ return currentUser(); },
   async signIn({email}:{email?:string} = {}){
-    const clean = (email || '').trim();
+    const clean = String(email ?? '').trim();
     if (!clean) throw new Error('Please enter your email address.');
     const redirectTo = window.location.hostname === 'localhost'
       ? window.location.origin
       : 'https://naija-connect-cdp-esport.vercel.app/';
-    const { error } = await supabase.auth.signInWithOtp({ email: clean, options:{ emailRedirectTo: redirectTo }});
+    const { error } = await supabase.auth.signInWithOtp({ email: clean, options:{ emailRedirectTo: redirectTo, shouldCreateUser:true }});
     if (error) throw error;
   },
   async signOut(){ await supabase.auth.signOut(); }
