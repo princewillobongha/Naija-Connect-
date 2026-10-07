@@ -242,12 +242,27 @@ function App() {
   const signUp = async (email: string, password: string) => {
     try {
       const data = await auth.signUpWithPassword(email, password);
-      if (!data?.session) { const message = 'Account creation needs email confirmation. Please make sure Confirm email is OFF in Supabase Auth settings.'; setNotice(message); return { ok: false, message }; }
-      await auth.signOut(); setUser(null); setProfile(null); setMatches([]); setPosts([]);
-      setNotice('Account created successfully. Please sign in to continue.'); window.location.hash = '#/login'; setPath('/login');
+      if (data?.session) {
+        setNotice('Account created successfully. You are now signed in.');
+        window.location.hash = '#/discover';
+        setPath('/discover');
+        return { ok: true, message: '' };
+      }
+      const message = 'Account created. Please check your email to confirm your account before signing in.';
+      setNotice(message);
+      window.location.hash = '#/login';
+      setPath('/login');
       return { ok: true, message: '' };
-    } catch (e: any) { const message = String(e?.message || 'Account creation could not be completed.'); setNotice(message); return { ok: false, message }; }
+    } catch (e: any) {
+      const raw = String(e?.message || '');
+      const message = /already registered|already exists|user already/i.test(raw)
+        ? 'This email is already registered. Please sign in instead.'
+        : raw || 'Account creation could not be completed.';
+      setNotice(message);
+      return { ok: false, message };
+    }
   };
+
   const signOut = async () => { await auth.signOut(); setUser(null); setProfile(null); setMatches([]); setPosts([]); go('/'); };
   const like = async (id: string) => {
     if (!user) { setNotice('Sign in to like and match with people.'); go('/login'); return; }
