@@ -528,3 +528,6 @@ function Login({ signIn }: { signIn: (email?: string) => Promise<{ok:boolean;mes
     </section>
   );
 }
+
+
+export default App;
