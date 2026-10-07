@@ -179,7 +179,12 @@ export const api = {
         const existingResult=await supabase.from('profiles').select('photos').eq('id',u.id).maybeSingle();
         const existing = Array.isArray(existingResult.data?.photos) ? existingResult.data.photos : [];
         const uploaded:string[]=[];
-        for(let i=0;i<body.photosData.length;i++){ if(body.photosData[i]) uploaded.push(await uploadMedia(u.id,body.photosData[i],(body.photoContentTypes||[])[i]||'image/jpeg','profiles')); }
+        for(let i=0;i<body.photosData.length;i++){
+          const item=String(body.photosData[i]||'');
+          if(!item) continue;
+          if(/^https?:\\/\\//i.test(item)) uploaded.push(item);
+          else uploaded.push(await uploadMedia(u.id,item,(body.photoContentTypes||[])[i]||'image/jpeg','profiles'));
+        }
         row.photos=[...existing.filter((x:string)=>!uploaded.includes(x)),...uploaded].slice(-6);
         if(row.photos[0]) row.photo=row.photos[0];
       }
