@@ -939,3 +939,10 @@ h1 {
     width: 100%;
   }
 }
+
+/* Final profile form layout fixes */
+.form-card { min-width: 0; }
+.bio-field { width: 100%; min-width: 0; }
+.bio-field textarea { display: block; width: 100%; max-width: 100%; min-height: 150px; box-sizing: border-box; overflow: auto; overflow-wrap: anywhere; word-break: break-word; }
+.save-success .save-copy { min-width: 0; }
+.save-success .save-copy span { display: block; }
