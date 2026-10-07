@@ -53,7 +53,7 @@ type Message = {
 const ADMIN_EMAIL = 'cinddycook@gmail.com';
 
 function isAdminUser(user: any) {
-  return String(user?.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  return user?.app_metadata?.role === 'admin' || (Array.isArray(user?.app_metadata?.roles) && user.app_metadata.roles.includes('admin'));
 }
 
 const demoProfiles: Profile[] = [
