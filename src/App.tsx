@@ -904,39 +904,39 @@ async function compressProfileImage(file: File): Promise<{data:string;type:strin
 }
 
 function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved:()=>void}){
-  const [name,setName]=useState(profile?.name||user?.name||''); const [phone,setPhone]=useState(''); const [age,setAge]=useState(String(profile?.age||25)); const [gender,setGender]=useState(profile?.gender||''); const [city,setCity]=useState(profile?.city||''); const [bio,setBio]=useState(profile?.bio||''); const [lookingFor,setLookingFor]=useState(profile?.lookingFor||'Dating / connection'); const [interests,setInterests]=useState(profile?.interests.join(', ')||''); const [photo,setPhoto]=useState(profile?.photo||''); const [photoData,setPhotoData]=useState(''); const [photoFile,setPhotoFile]=useState<File|null>(null); const [savedProfileId,setSavedProfileId]=useState<string|null>(profile?.id||null); const [saved,setSaved]=useState(false); const [photoType,setPhotoType]=useState('image/jpeg'); const [location,setLocation]=useState(profile?.latitude!==undefined&&profile?.longitude!==undefined?{latitude:profile.latitude,longitude:profile.longitude}:null); const [saving,setSaving]=useState(false); const [locating,setLocating]=useState(false);
+  const [name,setName]=useState(profile?.name||user?.name||''); const [phone,setPhone]=useState(''); const [age,setAge]=useState(String(profile?.age||25)); const [gender,setGender]=useState(profile?.gender||''); const [city,setCity]=useState(profile?.city||''); const [bio,setBio]=useState(profile?.bio||''); const [lookingFor,setLookingFor]=useState(profile?.lookingFor||'Dating / connection'); const [interests,setInterests]=useState(profile?.interests.join(', ')||''); const [photo,setPhoto]=useState(profile?.photo||''); const [photos,setPhotos]=useState<string[]>(profile?.photos?.length?profile.photos:(profile?.photo?[profile.photo]:[])); const [saving,setSaving]=useState(false); const [saved,setSaved]=useState(false);
   useEffect(()=>{(async()=>{try{const r=await api.get('/api/my-contact');setPhone(r.data.phone||'');}catch{}})();},[user?.userId]);
   if(!user)return <Empty title="Create your profile" text="Sign in to create a profile that other members can discover." action={()=>go('/login')} actionText="Sign in"/>;
   const pickPhoto=async(file?:File)=>{
     if(!file)return;
-    const isSupportedType=/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type);
-    const isSupportedExtension=/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
-    if(!isSupportedType && !isSupportedExtension){
-      alert('Please choose a JPEG, PNG, WebP or HEIC/HEIF photo.');
-      return;
-    }
+    const supported=/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
+    if(!supported){alert('Please choose a JPEG, PNG, WebP or HEIC/HEIF photo.');return;}
     if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}
-    try{
-      const prepared=await compressProfileImage(file);
-      setPhotoFile(null);
-      setPhotoType(prepared.type);
-      setPhoto(prepared.data);
-      setPhotoData(prepared.data);
-    }catch(e:any){
-      alert('We could not read that photo. Please choose a clear JPEG, PNG, WebP or HEIC/HEIF photo and try again.');
-    }
+    try{const prepared=await compressProfileImage(file);setPhotos(old=>[...old.filter(x=>x!==prepared.data),prepared.data].slice(-6));setPhoto(prepared.data);setSaved(false);}
+    catch{alert('We could not read that photo. Please choose a clear JPEG, PNG, WebP or HEIC/HEIF photo and try again.');}
   };
-  const fileToDataUrl=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=reject;reader.readAsDataURL(file);});
-  const save=async()=>{if(!name.trim()||Number(age)<18||!city.trim()){alert('Name, age 18+ and city are required.');return;}setSaving(true);setSaved(false);try{const freshPhotoData=photoData || (photoFile?await fileToDataUrl(photoFile):'');const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,phone,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),photoData:freshPhotoData,photoContentType:photoType});if(r.data.profile){setSavedProfileId(r.data.profile.id);setPhoto(r.data.profile.photo||photo);setPhotoData('');setPhotoFile(null);setSaved(true);await onSaved();}}catch(e:any){alert('Could not save your profile. ' + String(e?.message || 'Please try again.'));}finally{setSaving(false);}};
-  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Your photo, bio, interests and what you are looking for will appear on your public profile for signed-in members to discover.</p></div></div><div className="form-card"><div className="profile-photo-editor">
-  <div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div>
-  <label className="profile-photo-camera" aria-label="Add profile photo" title="Add profile photo">
-    <span>📷</span>
-    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>pickPhoto(e.target.files?.[0])}/>
-  </label>
-</div><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label>Phone number<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Your phone number"/><small className="private-note">Only the official NaijaConnect admin can see your phone number.</small></label><label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your photo, bio, interests and details are now visible to signed-in members.</span></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
+  const removePhoto=(index:number)=>{setPhotos(old=>{const next=old.filter((_,i)=>i!==index);setPhoto(next[0]||'');return next;});setSaved(false);};
+  const save=async()=>{
+    if(!name.trim()||Number(age)<18||!city.trim()){alert('Name, age 18+ and city are required.');return;}
+    setSaving(true);setSaved(false);
+    try{
+      const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,phone,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),photosData:photos,photoContentTypes:photos.map(()=> 'image/jpeg')});
+      if(r.data.profile){setPhotos(r.data.profile.photos?.length?r.data.profile.photos:(r.data.profile.photo?[r.data.profile.photo]:[]));setPhoto(r.data.profile.photo||'');setSaved(true);await onSaved();}
+    }catch(e:any){alert('Could not save your profile. '+String(e?.message||'Please try again.'));}finally{setSaving(false);}
+  };
+  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Build a complete profile so people can discover you by city, interests and dating intentions.</p></div></div><div className="form-card">
+    <div className="profile-photo-editor"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="profile-photo-camera" aria-label="Add profile photo" title="Add profile photo"><span>📷</span><input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={e=>pickPhoto(e.target.files?.[0])}/></label></div>
+    <div className="photo-manager">{photos.map((src,i)=><div className="managed-photo" key={src+i}><img src={src} alt={'Profile photo '+(i+1)}/><button type="button" onClick={()=>removePhoto(i)} aria-label="Remove photo">×</button></div>)}{photos.length<6&&<label className="add-photo-tile"><span>+</span><small>Add photo</small><input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={e=>pickPhoto(e.target.files?.[0])}/></label>}</div>
+    <small className="photo-limit">Add up to 6 photos. Your first photo is your main profile picture.</small>
+    <label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div>
+    <label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city appears on your profile and in city search.</small></span></div>
+    <label>Phone number<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Your phone number"/><small className="private-note">Only the official NaijaConnect admin can see your phone number.</small></label>
+    <label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label>
+    <label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label>
+    <label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label>
+    <button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your profile is now ready for discovery.</span></div><button className="secondary" onClick={()=>go('/profile/'+user.userId)}>View my profile <ChevronRight size={16}/></button></div>}
+  </div></section>;
 }
-
 function SettingsPage({ user, signOut, onDeleteAccount }: { user: any; signOut: () => void; onDeleteAccount: () => Promise<void> }) {
   return (
     <section className="content-page">
