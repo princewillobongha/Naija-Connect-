@@ -65,14 +65,19 @@ async function getPosts() {
 }
 export const auth = {
   async getUser(){ return currentUser(); },
-  async signIn({email}:{email?:string} = {}){
-    const clean = String(email ?? '').trim();
-    if (!clean) throw new Error('Please enter your email address.');
-    const redirectTo = window.location.hostname === 'localhost'
-      ? window.location.origin
-      : 'https://naija-connect-cdp-esport.vercel.app/';
-    const { error } = await supabase.auth.signInWithOtp({ email: clean, options:{ emailRedirectTo: redirectTo, shouldCreateUser:true }});
+  async signInWithPassword(email:string, password:string){
+    const clean = String(email || '').trim();
+    if (!clean || !password) throw new Error('Enter your email and password.');
+    const { error } = await supabase.auth.signInWithPassword({ email: clean, password });
     if (error) throw error;
+  },
+  async signUpWithPassword(email:string, password:string){
+    const clean = String(email || '').trim();
+    if (!clean || !password) throw new Error('Enter your email and password.');
+    if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+    const { data, error } = await supabase.auth.signUp({ email: clean, password });
+    if (error) throw error;
+    return data;
   },
   async signOut(){ await supabase.auth.signOut(); },
   onAuthStateChange(callback:(event:string, session:any)=>void){ return supabase.auth.onAuthStateChange(callback); }
