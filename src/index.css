@@ -898,3 +898,44 @@ h1 {
 .comment-compose{display:flex;gap:7px;margin-top:10px}.comment-compose input{flex:1;min-width:0;border:1px solid rgba(255,255,255,.09);background:rgba(0,0,0,.12);color:#fff;border-radius:12px;padding:10px 12px;outline:none}.comment-compose button{border:0;border-radius:12px;padding:0 14px;background:#7c3aed;color:#fff}
 .detail-topline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.detail-age{color:#94a3b8;font-size:15px}.profile-more-wrap{position:relative}.profile-more-menu{position:absolute;right:0;top:48px;width:180px;background:#111625;border:1px solid rgba(255,255,255,.12);border-radius:13px;padding:6px;z-index:5;box-shadow:0 16px 40px rgba(0,0,0,.35)}.profile-more-menu button{width:100%;border:0;background:none;color:#fff;text-align:left;padding:10px;border-radius:9px}.profile-more-menu button:hover{background:rgba(255,255,255,.06)}
 @media(max-width:600px){.facebook-composer{padding:13px;border-radius:16px}.facebook-composer>textarea{min-height:130px;font-size:16px}.composer-actions{flex-direction:column}.post-photo-grid{grid-template-columns:1fr}.post-photo-grid img,.post-feed-image{height:260px}.post-actions{font-size:12px}.detail-copy h1{font-size:38px}}
+
+/* Profile form and save confirmation fixes */
+.bio-field textarea {
+  min-height: 150px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  resize: vertical;
+}
+.save-success {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.save-success .save-copy {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.save-success .save-copy strong,
+.save-success .save-copy span {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.save-success .save-copy span {
+  color: #a7f3d0;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .save-success {
+    width: 100%;
+  }
+  .save-success .save-copy {
+    flex-basis: calc(100% - 34px);
+  }
+  .save-success > .secondary {
+    width: 100%;
+  }
+}
