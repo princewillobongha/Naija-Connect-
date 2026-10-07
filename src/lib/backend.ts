@@ -4,6 +4,7 @@ const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const supabase = createClient(url, key);
 const ADMIN_EMAIL = (import.meta.env.VITE_NAIJA_CONNECT_ADMIN_EMAIL || 'cinddycook@gmail.com').trim();
+function isAdminUser(u:any) { return Array.isArray(u?.app_metadata?.roles) ? u.app_metadata.roles.includes('admin') : u?.app_metadata?.role === 'admin'; }
 
 async function currentUser() {
   const { data } = await supabase.auth.getUser();
@@ -117,14 +118,14 @@ export const api = {
     }
     if (path === '/api/posts') return {data:{posts:await getPosts()}};
     if (path.startsWith('/api/admin/requests')) {
-      if (!u || !ADMIN_EMAIL || u.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) throw new Error('Unauthorized');
+      if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
       const {data,error}=await supabase.from('connection_requests').select('*').order('created_at',{ascending:false});
       if(error) throw error;
       return {data:{requests:(data||[]).map((r:any)=>({...r,userName:r.user_name,profileName:r.profile_name}))}};
     }
     if (path.startsWith('/api/admin/messages')) {
       if (!u) throw new Error('Unauthorized');
-      const isAdmin = u.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      const isAdmin = isAdminUser(u);
       const query = supabase.from('admin_messages').select('*').order('created_at',{ascending:true});
       const {data,error}=isAdmin ? await query : await query.eq('user_id',u.id);
       if(error) throw error;
@@ -200,7 +201,7 @@ export const api = {
       const {data,error}=await supabase.from('messages').insert({sender_id:u.id,receiver_id:body.receiverId,text:body.text}).select().single();if(error)throw error;return {data:{message:{id:data.id,senderId:data.sender_id,receiverId:data.receiver_id,text:data.text,createdAt:new Date(data.created_at).getTime()}}};
     }
     if(path==='/api/admin/messages'){
-      const admin = u.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      const admin = isAdminUser(u);
       const targetUserId = admin ? body.userId : u.id;
       if(!targetUserId) throw new Error('Recipient is required.');
       const senderType = admin ? 'admin' : 'user';
@@ -215,7 +216,7 @@ export const api = {
       return {data:{deleted:true}};
     }
     if(path==='/api/admin/delete-user'){
-      if(u.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) throw new Error('Unauthorized');
+      if(!isAdminUser(u)) throw new Error('Unauthorized');
       if(!body.userId) throw new Error('User is required.');
       const {error}=await supabase.rpc('delete_account_as_admin',{target_user_id:body.userId});
       if(error) throw error;
