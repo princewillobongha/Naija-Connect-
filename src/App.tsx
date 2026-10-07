@@ -224,6 +224,11 @@ function App() {
   useEffect(() => {
     const syncRoute = () => {
       const next = route();
+      if (isPasswordRecovery()) {
+        setPath('/reset-password');
+        setLoading(false);
+        return;
+      }
       if (next === '/community' || next === '/posts') {
         window.location.hash = '#/discover';
         setPath('/discover');
@@ -308,16 +313,15 @@ function App() {
       const body = [
         'Hello NaijaConnect Admin,',
         '',
-        'I would like to request an introduction to this NaijaConnect member:',
+        'I would like to request an introduction to ' + p.name + '.',
         '',
-        'Member profile: ' + p.name,
-        'Member location: ' + p.city + ', ' + p.country,
         'My name: ' + memberName,
-        'My account email: ' + (user?.email || ''),
+        'My email: ' + (user?.email || ''),
         '',
-        'Please help with the introduction through NaijaConnect.',
+        'Please assist with the introduction through NaijaConnect.',
         '',
-        'Thank you.'
+        'Kind regards,',
+        memberName
       ].join('\n');
       setNotice('Introduction request prepared. Opening your email app…');
       window.location.href = 'mailto:' + ADMIN_EMAIL + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
@@ -329,15 +333,15 @@ function App() {
     try { const r = await api.post('/api/posts', {text, photosData, photoContentTypes:photoTypes}); setPosts(old => [r.data.post, ...old]); setNotice('Post published.'); }
     catch (e:any) { setNotice(e?.message || 'Could not publish the post. Please try again.'); }
   };
-  const publicPages = path === '/' || path === '/login' || path.startsWith('/profile/');
+  const publicPages = path === '/' || path === '/login' || path === '/reset-password' || path.startsWith('/profile/');
   const protectedPage = !publicPages;
   if (loading && path !== '/login' && path !== '/') return <div className="loading-screen"><div className="brand-mark">N</div><h2>NaijaConnect</h2><p>Getting things ready…</p></div>;
   return <AppErrorBoundary><div className="app-shell"><Header user={user} profile={profile} signIn={signIn} signOut={signOut} />{notice && <div className="toast">{notice}</div>}<main className="page-wrap">
     {!user && protectedPage && <Login signIn={signIn} signUp={signUp} />}
+    {isPasswordRecovery() && path === '/reset-password' && <ResetPassword />}
     {user && path === '/' && <Home user={user} signIn={signIn} />}
     {path === '/' && !user && <Home user={user} signIn={signIn} />}
     {path === '/login' && <Login signIn={signIn} signUp={signUp} />}
-    {path === '/reset-password' && <ResetPassword />}
     {user && path === '/discover' && <Discover profiles={profiles} onLike={like} interested={interestedIds} />}
     {user && path === '/interested' && <InterestedPage profiles={profiles} interested={interestedIds} />}
     {user && (path === '/posts' || path === '/community') && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
@@ -368,8 +372,8 @@ function ResetPassword() {
   };
   return <section className="center-page"><div className="auth-card auth-card-professional">
     <div className="brand-large">N</div><span className="eyebrow auth-eyebrow">PASSWORD RECOVERY</span>
-    <h1>{done?'Password updated':'Choose a new password'}</h1>
-    <p>{done?'Your password has been updated. You can now sign in with it.':'Enter a new password for your NaijaConnect account.'}</p>
+    <h1>{done?'Password updated':'Set a new password'}</h1>
+    <p>{done?'Your new password is saved. Use it to sign in to NaijaConnect.':'Set a new password for your NaijaConnect account, then use it to sign in.'}</p>
     {!done && <><label className="email-field"><span>New password</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters"/></label><label className="email-field"><span>Confirm password</span><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} autoComplete="new-password" placeholder="Enter it again"/></label>{error&&<div className="auth-error" role="alert"><span>{error}</span></div>}<button className="primary full auth-submit" disabled={busy} onClick={submit}>{busy?'Updating…':'Update password'}</button></>}
     {done&&<button className="primary full" onClick={()=>{window.history.replaceState({},'',window.location.origin);window.location.hash='#/login';window.location.reload();}}>Go to sign in</button>}
   </div></section>;
@@ -377,12 +381,21 @@ function ResetPassword() {
 
 function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;signIn:()=>void;signOut:()=>void}) {
   const [open,setOpen]=useState(false);
+  const [hasAdminMessage,setHasAdminMessage]=useState(false);
   const admin=isAdminUser(user);
+  useEffect(()=>{
+    let alive=true;
+    if(!user || admin){ setHasAdminMessage(false); return ()=>{alive=false;}; }
+    api.get('/api/admin/messages').then((r:any)=>{
+      if(alive) setHasAdminMessage((r.data.messages||[]).some((m:any)=>m.senderType==='admin'));
+    }).catch(()=>{ if(alive) setHasAdminMessage(false); });
+    return ()=>{alive=false;};
+  },[user?.userId,admin]);
   return <header className="topbar">
     <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
     <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
     <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
-    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/interested')}}><Heart size={17}/> Interested</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
+    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/interested')}}><Heart size={17}/> Interested</button>{hasAdminMessage&&<button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>}{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
   </header>;
 }
 
@@ -514,7 +527,7 @@ function Login({ signIn, signUp }: { signIn: (email?: string, password?: string)
     <section className="center-page"><div className="auth-card auth-card-professional">
       <div className="brand-large">N</div><span className="eyebrow auth-eyebrow">PASSWORD RECOVERY</span>
       <h1>Reset your password</h1>
-      <p>{sent ? 'If an account uses this email, a password reset link has been sent. Check your inbox and follow the link.' : 'Enter your account email and we will send you a secure reset link.'}</p>
+      <p>{sent ? 'Check your email for the secure reset link. Open it, set a new password, then use that new password to sign in.' : 'Enter your account email and we will send you a secure reset link.'}</p>
       {!sent && <><label className="email-field"><span>Email address</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/></label>
       {error && <div className="auth-error" role="alert"><span>{error}</span></div>}
       <button type="button" className="primary full auth-submit" disabled={busy} onClick={submit}>{busy?'Sending…':'Send reset link'}</button></>}
@@ -809,7 +822,7 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
   const pickPhoto=async(file?:File)=>{if(!file)return;if(!file.type.startsWith('image/')){alert('Please choose an image file.');return;}if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}try{const prepared=await compressProfileImage(file);setPhotoFile(null);setPhotoType(prepared.type);setPhoto(prepared.data);setPhotoData(prepared.data);}catch(e:any){alert(e?.message||'Could not prepare that photo. Please choose another image.');}};
   const fileToDataUrl=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=reject;reader.readAsDataURL(file);});
   const save=async()=>{if(!name.trim()||Number(age)<18||!city.trim()){alert('Name, age 18+ and city are required.');return;}setSaving(true);setSaved(false);try{const freshPhotoData=photoData || (photoFile?await fileToDataUrl(photoFile):'');const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,phone,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),photoData:freshPhotoData,photoContentType:photoType});if(r.data.profile){setSavedProfileId(r.data.profile.id);setPhoto(r.data.profile.photo||photo);setPhotoData('');setPhotoFile(null);setSaved(true);await onSaved();}}catch(e:any){alert('Could not save your profile. ' + String(e?.message || 'Please try again.'));}finally{setSaving(false);}};
-  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Your photo, bio, interests and what you are looking for will appear on your public profile for signed-in members to discover.</p></div></div><div className="form-card"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="upload-label">Profile photo<input type="file" accept="image/*" onChange={e=>pickPhoto(e.target.files?.[0])}/><small>Your selected photo appears above immediately. Images up to 25 MB are supported.</small></label><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label>Phone number<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Your phone number"/><small className="private-note">Only the official NaijaConnect admin can see your phone number.</small></label><label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your photo, bio, interests and details are now visible to signed-in members.</span></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
+  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Your photo, bio, interests and what you are looking for will appear on your public profile for signed-in members to discover.</p></div></div><div className="form-card"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="upload-label">Profile photo<input type="file" accept="image/*" onChange={e=>pickPhoto(e.target.files?.[0])}/><small>Your selected photo appears above immediately. Maximum 25 MB.</small></label><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label>Phone number<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Your phone number"/><small className="private-note">Only the official NaijaConnect admin can see your phone number.</small></label><label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your photo, bio, interests and details are now visible to signed-in members.</span></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
 }
 
 function SettingsPage({ user, signOut }: { user: any; signOut: () => void }) {
@@ -943,8 +956,19 @@ function AdminMessages(){
   const [busy,setBusy]=useState(false);
   const load=async()=>{try{const r=await api.get('/api/admin/messages');setMessages(r.data.messages||[]);}catch{}};
   useEffect(()=>{load();},[]);
-  const send=async()=>{if(!text.trim()||busy)return;setBusy(true);try{await api.post('/api/admin/messages',{text:text.trim()});setText('');await load();}finally{setBusy(false);}};
-  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>You can reply here. Your replies go only to the official admin account.</p></div></div><div className="admin-message-list">{messages.map(m=><article className={m.senderType==='user'?'admin-message user-reply':'admin-message'} key={m.id}><div className="admin-message-head"><span className="admin-badge"><ShieldCheck size={14}/> {m.senderType==='admin'?'ADMIN':'YOUR REPLY'}</span><small>{new Date(m.createdAt).toLocaleString()}</small></div><p>{m.text}</p></article>)}{!messages.length&&<div className="empty-mini">No admin messages yet.</div>}</div><div className="admin-reply-box"><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Reply to the official NaijaConnect admin…"/><button className="primary" disabled={busy} onClick={send}>{busy?'Sending…':'Reply to admin'}</button></div></section>;
+  const hasAdminMessage=messages.some(m=>m.senderType==='admin');
+  const send=async()=>{if(!text.trim()||busy||!hasAdminMessage)return;setBusy(true);try{await api.post('/api/admin/messages',{text:text.trim()});setText('');await load();}finally{setBusy(false);}};
+  if(!hasAdminMessage) return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>There are no messages from the official admin yet.</p></div></div><div className="empty-mini">When the admin sends you a message, it will appear here and you will be able to reply.</div></section>;
+  return <section className="content-page facebook-admin-chat">
+    <div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>Your private conversation with the official admin.</p></div></div>
+    <div className="facebook-admin-thread">
+      {messages.map(m=><div className={m.senderType==='user'?'admin-chat-bubble mine':'admin-chat-bubble'} key={m.id}><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}
+    </div>
+    <div className="admin-chat-compose">
+      <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message…" onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}/>
+      <button className="send-icon-button" disabled={busy||!text.trim()} onClick={send} aria-label="Send message" title="Send message">➤</button>
+    </div>
+  </section>;
 }
 
 function Posts({posts,onCreatePost,onLikePost,onComment}:{posts:Post[],onCreatePost:(text:string,photosData:string[],photoTypes:string[])=>Promise<void>,onLikePost:(id:string)=>Promise<void>,onComment:(id:string,text:string)=>Promise<void>}) {
