@@ -4,7 +4,7 @@ const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const supabase = createClient(url, key);
 const ADMIN_EMAIL = (import.meta.env.VITE_NAIJA_CONNECT_ADMIN_EMAIL || 'cinddycook@gmail.com').trim();
-function isAdminUser(u:any) { return Array.isArray(u?.app_metadata?.roles) ? u.app_metadata.roles.includes('admin') : u?.app_metadata?.role === 'admin'; }
+function isAdminUser(u:any) { return u?.app_metadata?.role === 'admin' || (Array.isArray(u?.app_metadata?.roles) && u.app_metadata.roles.includes('admin')) || u?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(); }
 
 async function currentUser() {
   const { data } = await supabase.auth.getUser();
