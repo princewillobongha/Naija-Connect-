@@ -187,6 +187,7 @@ function App() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [demoInterested, setDemoInterested] = useState<Set<string>>(new Set());
+  const [interestedIds, setInterestedIds] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [path, setPath] = useState(route());
@@ -203,6 +204,10 @@ function App() {
           const liveProfiles = peopleResult.value.data.profiles || [];
           setProfiles(liveProfiles.length ? liveProfiles : demoProfiles);
         }
+        try {
+          const likesResponse = await api.get('/api/likes/me');
+          setInterestedIds(new Set((likesResponse.data.likes || []).map((x:any)=>x.profile_id)));
+        } catch { setInterestedIds(new Set()); }
         try {
           const postsResponse = await api.get('/api/posts');
           setPosts(postsResponse.data.posts || []);
@@ -286,18 +291,18 @@ function App() {
 
   const signOut = async () => { await auth.signOut(); setUser(null); setProfile(null); setMatches([]); setPosts([]); go('/'); };
   const like = async (id: string) => {
-    if (!user) { setNotice('Sign in to like and match with people.'); go('/login'); return; }
+    if (!user) { setNotice('Sign in to mark profiles as interested.'); go('/login'); return; }
     try {
-      if (id.startsWith('demo-')) { setDemoInterested(old => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; }); setNotice('❤️ Your interest has been saved.'); return; }
+      if (id.startsWith('demo-')) { setDemoInterested(old => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; }); setNotice('❤️ Interest updated.'); return; }
       if (id === user.userId) { setNotice('You cannot mark your own profile as interested.'); return; }
-      const r = await api.post('/api/likes', { profileId: id }); setNotice(r.data.matched ? '❤️ It’s a mutual connection!' : '❤️ You’re interested in this profile.');
+      const r = await api.post('/api/likes', { profileId: id });
+      setInterestedIds(old => { const next = new Set(old); if (r.data.liked) next.add(id); else next.delete(id); return next; });
+      setNotice(r.data.liked ? '❤️ Added to your Interested profiles.' : 'Interest removed.');
     } catch (e:any) { setNotice(e?.message || 'Could not save your interest. Please try again.'); }
   };
   const connectToAdmin = async (p: Profile) => {
-    try { await api.post('/api/connection-requests', { profileId: p.id, profileName: p.name }); } catch {}
-    const subject = encodeURIComponent(`NaijaConnect connection request: ${p.name}, ${p.age}`);
-    const body = encodeURIComponent(`Hello NaijaConnect Admin,\n\nI am interested in connecting with ${p.name}, age ${p.age}, from ${p.city}, ${p.country}.\n\nProfile ID: ${p.id}\n\nPlease help connect us.\n\nThank you.`);
-    window.location.href = `mailto:${ADMIN_EMAIL}?subject=${subject}&body=${body}`;
+    try { await api.post('/api/connection-requests', { profileId: p.id, profileName: p.name }); setNotice('Connection request sent to the official NaijaConnect admin.'); }
+    catch (e:any) { setNotice(e?.message || 'Could not send the connection request.'); }
   };
   const createPost = async (text:string, photosData:string[], photoTypes:string[]) => {
     try { const r = await api.post('/api/posts', {text, photosData, photoContentTypes:photoTypes}); setPosts(old => [r.data.post, ...old]); setNotice('Post published.'); }
@@ -312,7 +317,8 @@ function App() {
     {path === '/' && !user && <Home user={user} signIn={signIn} />}
     {path === '/login' && <Login signIn={signIn} signUp={signUp} />}
     {path === '/reset-password' && <ResetPassword />}
-    {user && path === '/discover' && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
+    {user && path === '/discover' && <Discover profiles={profiles} onLike={like} interested={interestedIds} />}
+    {user && path === '/interested' && <InterestedPage profiles={profiles} interested={interestedIds} />}
     {user && (path === '/posts' || path === '/community') && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
 
     {path.startsWith('/profile/') && <ProfilePage id={path.split('/')[2]} profiles={profiles} user={user} onLike={like} onConnect={connectToAdmin} />}
@@ -354,8 +360,8 @@ function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;sig
   return <header className="topbar">
     <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
     <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
-    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
-    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
+    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button><button className="icon-square interest-nav" onClick={()=>go('/interested')} aria-label="Interested profiles"><Heart size={20} fill="currentColor"/></button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
+    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/interested')}}><Heart size={17}/> Interested</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
   </header>;
 }
 
@@ -525,7 +531,7 @@ function Discover({profiles,onLike,interested}:{profiles:Profile[],onLike:(id:st
   return <section className="content-page">
     <div className="page-heading"><div><span className="eyebrow">DISCOVER</span><h1>People</h1><p>Browse member profiles. Everyone with an account can discover new members.</p></div><button className="outline-btn" onClick={()=>go('/settings')}><SlidersHorizontal size={17}/> Preferences</button></div>
     <div className="filter-panel"><label><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search name, city or interest"/></label><select value={city} onChange={e=>setCity(e.target.value)}><option>All Nigeria</option><option>Lagos</option><option>Abuja</option><option>Port Harcourt</option><option>Calabar</option><option>Kano</option><option>Worldwide</option></select><select value={gender} onChange={e=>setGender(e.target.value)}><option>Everyone</option><option>Woman</option><option>Man</option></select><select value={maxAge} onChange={e=>setMaxAge(Number(e.target.value))}><option value="25">18–25</option><option value="35">18–35</option><option value="45">18–45</option><option value="60">18–60</option></select></div>
-      <div className="profile-grid">{filtered.map(p=><ProfileCard key={p.id} p={p} onLike={onLike} interested={p.id.startsWith('demo-') ? demoInterested.has(p.id) : false}/>)}{!filtered.length&&<Empty title="No people found" text="Try widening your filters or exploring worldwide."/>}</div>
+      <div className="profile-grid">{filtered.map(p=><ProfileCard key={p.id} p={p} onLike={onLike} interested={interested?.has(p.id) || false}/>)}{!filtered.length&&<Empty title="No people found" text="Try widening your filters or exploring worldwide."/>}</div>
   </section>
 }
 
@@ -552,11 +558,19 @@ function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Pro
       {p.interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div>}
       <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div>
       {!own&&<div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
-      {!own&&<p className="connect-note">Interested is a simple ❤️ reaction. Connect sends a request for an introduction through the official NaijaConnect admin.</p>}
+      
       {own&&<button className="primary" onClick={()=>go('/profile')}>Edit my profile</button>}
     </div>
   </div></section>
 }
+function InterestedPage({profiles,interested}:{profiles:Profile[],interested:Set<string>}) {
+  const items=profiles.filter(p=>interested.has(p.id));
+  return <section className="content-page">
+    <div className="page-heading"><div><span className="eyebrow">INTERESTED</span><h1>Profiles you’re interested in</h1><p>Your ❤️ reactions are saved here so you can find those profiles again.</p></div></div>
+    <div className="profile-grid">{items.map(p=><ProfileCard key={p.id} p={p} onLike={()=>{}} interested={true}/>)}{!items.length&&<Empty title="No interested profiles yet" text="Tap Interested ❤️ on a profile in Discover and it will appear here." action={()=>go('/discover')} actionText="Discover people" />}</div>
+  </section>;
+}
+
 function Matches({ matches }: { matches: Match[] }) {
   return (
     <section className="content-page">
@@ -766,12 +780,13 @@ function ChatPage({
 }
 
 function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved:()=>void}){
-  const [name,setName]=useState(profile?.name||user?.name||''); const [age,setAge]=useState(String(profile?.age||25)); const [gender,setGender]=useState(profile?.gender||''); const [city,setCity]=useState(profile?.city||''); const [bio,setBio]=useState(profile?.bio||''); const [lookingFor,setLookingFor]=useState(profile?.lookingFor||'Dating / connection'); const [interests,setInterests]=useState(profile?.interests.join(', ')||''); const [photo,setPhoto]=useState(profile?.photo||''); const [photoData,setPhotoData]=useState(''); const [photoFile,setPhotoFile]=useState<File|null>(null); const [savedProfileId,setSavedProfileId]=useState<string|null>(profile?.id||null); const [saved,setSaved]=useState(false); const [photoType,setPhotoType]=useState('image/jpeg'); const [location,setLocation]=useState(profile?.latitude!==undefined&&profile?.longitude!==undefined?{latitude:profile.latitude,longitude:profile.longitude}:null); const [saving,setSaving]=useState(false); const [locating,setLocating]=useState(false);
+  const [name,setName]=useState(profile?.name||user?.name||''); const [phone,setPhone]=useState(''); const [age,setAge]=useState(String(profile?.age||25)); const [gender,setGender]=useState(profile?.gender||''); const [city,setCity]=useState(profile?.city||''); const [bio,setBio]=useState(profile?.bio||''); const [lookingFor,setLookingFor]=useState(profile?.lookingFor||'Dating / connection'); const [interests,setInterests]=useState(profile?.interests.join(', ')||''); const [photo,setPhoto]=useState(profile?.photo||''); const [photoData,setPhotoData]=useState(''); const [photoFile,setPhotoFile]=useState<File|null>(null); const [savedProfileId,setSavedProfileId]=useState<string|null>(profile?.id||null); const [saved,setSaved]=useState(false); const [photoType,setPhotoType]=useState('image/jpeg'); const [location,setLocation]=useState(profile?.latitude!==undefined&&profile?.longitude!==undefined?{latitude:profile.latitude,longitude:profile.longitude}:null); const [saving,setSaving]=useState(false); const [locating,setLocating]=useState(false);
+  useEffect(()=>{(async()=>{try{const r=await api.get('/api/my-contact');setPhone(r.data.phone||'');}catch{}})();},[user?.userId]);
   if(!user)return <Empty title="Create your profile" text="Sign in to create a profile that other members can discover." action={()=>go('/login')} actionText="Sign in"/>;
   const pickPhoto=(file?:File)=>{if(!file)return;if(!file.type.startsWith('image/'))return;if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}setPhotoFile(file);setPhotoType(file.type);const reader=new FileReader();reader.onload=()=>setPhoto(String(reader.result||''));reader.readAsDataURL(file);};
   const fileToDataUrl=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=reject;reader.readAsDataURL(file);});
-  const save=async()=>{if(!name.trim()||Number(age)<18||!city.trim()){alert('Name, age 18+ and city are required.');return;}setSaving(true);setSaved(false);try{const freshPhotoData=photoFile?await fileToDataUrl(photoFile):photoData;const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),photoData:freshPhotoData,photoContentType:photoType});if(r.data.profile){setSavedProfileId(r.data.profile.id);setPhoto(r.data.profile.photo||photo);setPhotoData('');setPhotoFile(null);setSaved(true);await onSaved();}}catch{alert('Could not save your profile. Please try again.');}finally{setSaving(false);}};
-  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Your photo, bio, interests and what you are looking for will appear on your public profile for signed-in members to discover.</p></div></div><div className="form-card"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="upload-label">Profile photo<input type="file" accept="image/*" onChange={e=>pickPhoto(e.target.files?.[0])}/><small>Your selected photo appears above immediately. Images up to 25 MB are supported.</small></label><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your photo, bio, interests and details are now visible to signed-in members.</span></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
+  const save=async()=>{if(!name.trim()||Number(age)<18||!city.trim()){alert('Name, age 18+ and city are required.');return;}setSaving(true);setSaved(false);try{const freshPhotoData=photoFile?await fileToDataUrl(photoFile):photoData;const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,phone,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),photoData:freshPhotoData,photoContentType:photoType});if(r.data.profile){setSavedProfileId(r.data.profile.id);setPhoto(r.data.profile.photo||photo);setPhotoData('');setPhotoFile(null);setSaved(true);await onSaved();}}catch{alert('Could not save your profile. Please try again.');}finally{setSaving(false);}};
+  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Your photo, bio, interests and what you are looking for will appear on your public profile for signed-in members to discover.</p></div></div><div className="form-card"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="upload-label">Profile photo<input type="file" accept="image/*" onChange={e=>pickPhoto(e.target.files?.[0])}/><small>Your selected photo appears above immediately. Images up to 25 MB are supported.</small></label><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label>Phone number<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Your phone number"/><small className="private-note">Only the official NaijaConnect admin can see your phone number.</small></label><label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your photo, bio, interests and details are now visible to signed-in members.</span></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
 }
 
 function SettingsPage({ user, signOut }: { user: any; signOut: () => void }) {
