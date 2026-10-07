@@ -866,7 +866,7 @@ function Posts({posts,onCreatePost,onLikePost,onComment}:{posts:Post[],onCreateP
       return <article className="post-card" key={p.id}>
         <div className="post-author"><Avatar p={p.author}/><span><strong>{p.author.name}</strong><small>{p.author.city}, {p.author.country} • {new Date(p.createdAt).toLocaleString()}</small></span></div>
         {p.text&&<p className="post-text">{p.text}</p>}
-        {pics.length>0&&<div className={pics.length===1?'post-photo-grid single':'post-photo-grid'}>{pics.map((src,i)=><img className="post-feed-image" key={i} src={src} alt="Community post"/></div>)}
+        {pics.length>0&&<div className={pics.length===1?'post-photo-grid single':'post-photo-grid'}>{pics.map((src,i)=><img className="post-feed-image" key={i} src={src} alt="Community post"/>)}</div>}
         <div className="post-engagement"><span>{p.likes||0} {(p.likes||0)===1?'Like':'Likes'}</span><span>{p.comments?.length||0} {(p.comments?.length||0)===1?'Comment':'Comments'}</span></div>
         <div className="post-actions"><button className={p.likedByMe?'post-action active':'post-action'} onClick={()=>onLikePost(p.id)}><Heart size={18} fill={p.likedByMe?'currentColor':'none'}/> Like</button><button className="post-action" onClick={()=>document.getElementById('comment-'+p.id)?.focus()}><MessageCircle size={18}/> Comment</button><button className="post-action" onClick={()=>go('/profile/'+p.author.id)}>View profile</button></div>
         <div className="comment-list">{(p.comments||[]).map((cm:any)=><div className="comment" key={cm.id}><Avatar p={cm.author}/><div><strong>{cm.author?.name||'Member'}</strong><p>{cm.text}</p></div></div>)}</div>
