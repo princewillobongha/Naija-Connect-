@@ -262,7 +262,24 @@ function AppContent() {
   const signUp = async (email: string, password: string) => {
     try {
       const data = await auth.signUpWithPassword(email, password);
-      setNotice(data?.session ? 'Account created successfully.' : 'Account created. Please check your email if confirmation is required.');
+
+      // Confirm Email is disabled in Supabase, so a successful signup should
+      // return a session. We deliberately sign the new account out and send
+      // the member to the normal sign-in screen, matching the requested flow.
+      if (!data?.session) {
+        const message = 'Account creation needs email confirmation. Please make sure Confirm email is OFF in Supabase Auth settings.';
+        setNotice(message);
+        return { ok: false, message };
+      }
+
+      await auth.signOut();
+      setUser(null);
+      setProfile(null);
+      setMatches([]);
+      setPosts([]);
+      setNotice('Account created successfully. Please sign in to continue.');
+      window.location.hash = '#/login';
+      setPath('/login');
       return { ok: true, message: '' };
     } catch (e: any) {
       const message = String(e?.message || 'Account creation could not be completed.');
