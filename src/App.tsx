@@ -177,6 +177,7 @@ function App() {
   const [demoInterested, setDemoInterested] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  const [path, setPath] = useState(route());
 
   const refresh = async () => {
     try {
@@ -208,12 +209,18 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };  useEffect(() => {
+  };
+  useEffect(() => {
+    const syncRoute = () => setPath(route());
+    syncRoute();
     refresh();
-    const on = () => refresh();
-    window.addEventListener('hashchange', on);
-    const { data: listener } = auth.onAuthStateChange?.(() => refresh()) || { data: { subscription: null } };
-    return () => { window.removeEventListener('hashchange', on); listener?.subscription?.unsubscribe?.(); };
+    window.addEventListener('hashchange', syncRoute);
+    const { data: listener } = auth.onAuthStateChange?.((event, session) => {
+      setUser(session?.user ? { ...session.user, userId: session.user.id, name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Member' } : null);
+      setPath(route());
+      window.setTimeout(() => refresh(), 0);
+    }) || { data: { subscription: null } };
+    return () => { window.removeEventListener('hashchange', syncRoute); listener?.subscription?.unsubscribe?.(); };
   }, []);
   useEffect(() => {
     if (notice) {
@@ -284,7 +291,6 @@ function App() {
       setNotice(e?.message || 'Could not publish the post. Please try again.');
     }
   };
-  const path = route();
   const publicPages = path === '/' || path === '/login' || path.startsWith('/profile/');
   const protectedPage = !publicPages;
   if (loading)
