@@ -1,0 +1,14 @@
+{
+  "methods": ["google", "apple", "x", "email"],
+  "headline": "Meet. Match. Connect.",
+  "subtitle": "A Nigerian-first community for real connections.",
+  "style": {
+    "mode": "dark",
+    "accentColor": "#d946ef",
+    "backgroundColor": "#080b14",
+    "panelColor": "#111625",
+    "textColor": "#f8fafc",
+    "fontFamily": "Inter, system-ui, sans-serif",
+    "borderRadius": 16
+  }
+}
