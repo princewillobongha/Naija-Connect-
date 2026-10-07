@@ -148,6 +148,11 @@ function go(path: string) {
 function route() {
   return window.location.hash.replace(/^#/, '') || '/';
 }
+function isPasswordRecovery() {
+  return new URLSearchParams(window.location.search).get('reset') === '1'
+    || window.location.hash.includes('access_token=')
+    || window.location.hash.includes('type=recovery');
+}
 function initials(name: string) {
   return name
     .split(' ')
@@ -223,7 +228,8 @@ function App() {
     window.addEventListener('hashchange', syncRoute);
     const { data: listener } = auth.onAuthStateChange?.((event, session) => {
       setUser(session?.user ? { ...session.user, userId: session.user.id, name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Member' } : null);
-      if (event === 'SIGNED_IN') { window.location.hash = '#/discover'; setPath('/discover'); setNotice('You are signed in successfully.'); }
+      if (event === 'PASSWORD_RECOVERY' || isPasswordRecovery()) { setPath('/reset-password'); }
+      else if (event === 'SIGNED_IN') { window.location.hash = '#/discover'; setPath('/discover'); setNotice('You are signed in successfully.'); }
       else if (event === 'SIGNED_OUT') { window.location.hash = '#/'; setPath('/'); }
       else setPath(route());
       window.setTimeout(() => refresh(false), 0);
@@ -290,6 +296,7 @@ function App() {
     {user && path === '/' && <Home user={user} signIn={signIn} />}
     {path === '/' && !user && <Home user={user} signIn={signIn} />}
     {path === '/login' && <Login signIn={signIn} signUp={signUp} />}
+    {path === '/reset-password' && <ResetPassword />}
     {user && path === '/discover' && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
     {user && (path === '/posts' || path === '/community') && <Posts posts={posts} onCreatePost={createPost} onLikePost={async(id)=>{try{const r=await api.post('/api/post-likes',{postId:id});setPosts(old=>old.map(p=>p.id===id?{...p,likes:r.data.likes,likedByMe:r.data.liked}:p));}catch{setNotice('Could not update the reaction.');}}} onComment={async(id,text)=>{try{const r=await api.post('/api/post-comments',{postId:id,text});setPosts(old=>old.map(p=>p.id===id?{...p,comments:[...(p.comments||[]),r.data.comment]}:p));}catch{setNotice('Could not add your comment.');}}} />}
     {path.startsWith('/profile/') && <ProfilePage id={path.split('/')[2]} profiles={profiles} user={user} onLike={like} onConnect={connectToAdmin} />}
@@ -299,6 +306,30 @@ function App() {
     {user && path === '/settings' && <SettingsPage user={user} signOut={signOut} />}
     {path === '/safety' && <SafetyPage />}
   </main></div></AppErrorBoundary>;
+}
+
+function ResetPassword() {
+  const [password,setPassword]=useState('');
+  const [confirm,setConfirm]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  const [done,setDone]=useState(false);
+  const submit=async()=>{
+    setError('');
+    if(password.length<8){setError('Password must be at least 8 characters.');return;}
+    if(password!==confirm){setError('Passwords do not match.');return;}
+    setBusy(true);
+    try{ await auth.updatePassword(password); setDone(true); }
+    catch(e:any){setError(String(e?.message||'Could not update your password. Please request a new reset link.')); }
+    finally{setBusy(false);}
+  };
+  return <section className="center-page"><div className="auth-card auth-card-professional">
+    <div className="brand-large">N</div><span className="eyebrow auth-eyebrow">PASSWORD RECOVERY</span>
+    <h1>{done?'Password updated':'Choose a new password'}</h1>
+    <p>{done?'Your password has been updated. You can now sign in with it.':'Enter a new password for your NaijaConnect account.'}</p>
+    {!done && <><label className="email-field"><span>New password</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters"/></label><label className="email-field"><span>Confirm password</span><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} autoComplete="new-password" placeholder="Enter it again"/></label>{error&&<div className="auth-error" role="alert"><span>{error}</span></div>}<button className="primary full auth-submit" disabled={busy} onClick={submit}>{busy?'Updating…':'Update password'}</button></>}
+    {done&&<button className="primary full" onClick={()=>{window.history.replaceState({},'',window.location.origin);window.location.hash='#/login';window.location.reload();}}>Go to sign in</button>}
+  </div></section>;
 }
 
 function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;signIn:()=>void;signOut:()=>void}) {
@@ -409,52 +440,62 @@ function Feature({
 }
 
 function Login({ signIn, signUp }: { signIn: (email?: string, password?: string) => Promise<{ok:boolean;message:string}>; signUp: (email:string,password:string) => Promise<{ok:boolean;message:string}> }) {
-  const [mode,setMode]=useState<'signin'|'signup'>('signin');
+  const [mode,setMode]=useState<'signin'|'signup'|'forgot'>('signin');
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
   const [confirm,setConfirm]=useState('');
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
+  const [sent,setSent]=useState(false);
 
   const submit=async()=>{
     const clean=email.trim();
     setError('');
     if(!/^\S+@\S+\.\S+$/.test(clean)){setError('Enter a valid email address.');return;}
-    if(password.length<8){setError('Password must be at least 8 characters.');return;}
+    if(mode!=='forgot' && password.length<8){setError('Password must be at least 8 characters.');return;}
     if(mode==='signup' && password!==confirm){setError('Passwords do not match.');return;}
     if(busy)return;
     setBusy(true);
     try{
+      if(mode==='forgot'){
+        await auth.requestPasswordReset(clean, window.location.origin + '/?reset=1');
+        setSent(true);
+        return;
+      }
       const result = mode==='signin' ? await signIn(clean,password) : await signUp(clean,password);
       if(!result.ok) setError(result.message);
     } finally { setBusy(false); }
   };
 
+  if(mode==='forgot') return (
+    <section className="center-page"><div className="auth-card auth-card-professional">
+      <div className="brand-large">N</div><span className="eyebrow auth-eyebrow">PASSWORD RECOVERY</span>
+      <h1>Reset your password</h1>
+      <p>{sent ? 'If an account uses this email, a password reset link has been sent. Check your inbox and follow the link.' : 'Enter your account email and we will send you a secure reset link.'}</p>
+      {!sent && <><label className="email-field"><span>Email address</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/></label>
+      {error && <div className="auth-error" role="alert"><span>{error}</span></div>}
+      <button type="button" className="primary full auth-submit" disabled={busy} onClick={submit}>{busy?'Sending…':'Send reset link'}</button></>}
+      <button type="button" className="secondary full" onClick={()=>{setMode('signin');setError('');setSent(false);}}>Back to sign in</button>
+    </div></section>
+  );
+
   return (
-    <section className="center-page">
-      <div className="auth-card auth-card-professional">
-        <div className="brand-large">N</div>
-        <span className="eyebrow auth-eyebrow">SECURE MEMBER ACCESS</span>
-        <h1>{mode==='signin'?'Welcome back':'Create your NaijaConnect account'}</h1>
-        <p>{mode==='signin'?'Sign in with your email and password.':'Create a secure account with your email and password.'}</p>
-        {error && <div className="auth-error" role="alert"><strong>We couldn't complete that.</strong><span>{error}</span></div>}
-        <label className="email-field"><span>Email address</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/></label>
-        <label className="email-field"><span>Password</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="At least 8 characters" autoComplete={mode==='signin'?'current-password':'new-password'}/></label>
-        {mode==='signup' && <label className="email-field"><span>Confirm password</span><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="Enter your password again" autoComplete="new-password"/></label>}
-        <button type="button" className="primary full auth-submit" disabled={busy} onClick={submit}>
-          {busy ? (mode==='signin'?'Signing in…':'Creating account…') : (mode==='signin'?<><LogIn size={18}/> Sign in</>:<>Create account <ChevronRight size={18}/></>)}
-        </button>
-        <button type="button" className="secondary full" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setError('');}}>
-          {mode==='signin'?'New to NaijaConnect? Create an account':'Already have an account? Sign in'}
-        </button>
-        <div className="auth-security"><ShieldCheck size={16}/><span>Your password is securely handled by Supabase Auth.</span></div>
-        <small className="legal">By continuing, you confirm that you are 18 or older and agree to use the platform respectfully.</small>
-      </div>
-    </section>
+    <section className="center-page"><div className="auth-card auth-card-professional">
+      <div className="brand-large">N</div><span className="eyebrow auth-eyebrow">SECURE MEMBER ACCESS</span>
+      <h1>{mode==='signin'?'Welcome back':'Create your NaijaConnect account'}</h1>
+      <p>{mode==='signin'?'Sign in with your email and password.':'Create a secure account with your email and password.'}</p>
+      {error && <div className="auth-error" role="alert"><strong>We couldn't complete that.</strong><span>{error}</span></div>}
+      <label className="email-field"><span>Email address</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"/></label>
+      <label className="email-field"><span>Password</span><input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="At least 8 characters" autoComplete={mode==='signin'?'current-password':'new-password'}/></label>
+      {mode==='signin' && <button type="button" className="text-button" onClick={()=>{setMode('forgot');setError('');}}>Forgot password?</button>}
+      {mode==='signup' && <label className="email-field"><span>Confirm password</span><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="Enter your password again" autoComplete="new-password"/></label>}
+      <button type="button" className="primary full auth-submit" disabled={busy} onClick={submit}>{busy ? (mode==='signin'?'Signing in…':'Creating account…') : (mode==='signin'?<><LogIn size={18}/> Sign in</>:<>Create account <ChevronRight size={18}/></>)}</button>
+      <button type="button" className="secondary full" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setError('');}}>{mode==='signin'?'New to NaijaConnect? Create an account':'Already have an account? Sign in'}</button>
+      <div className="auth-security"><ShieldCheck size={16}/><span>Your password is securely handled by Supabase Auth.</span></div>
+      <small className="legal">By continuing, you confirm that you are 18 or older and agree to use the platform respectfully.</small>
+    </div></section>
   );
 }
-
-
 
 function Discover({profiles,onLike,interested}:{profiles:Profile[],onLike:(id:string)=>void,interested?:Set<string>}){
   const [city,setCity]=useState('All Nigeria'); const [gender,setGender]=useState('Everyone'); const [maxAge,setMaxAge]=useState(45); const [query,setQuery]=useState('');
