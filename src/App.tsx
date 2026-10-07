@@ -919,7 +919,7 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
     if(!name.trim()||Number(age)<18||!city.trim()){alert('Name, age 18+ and city are required.');return;}
     setSaving(true);setSaved(false);
     try{
-      const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,phone,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),photosData:photos,photoContentTypes:photos.map(()=> 'image/jpeg')});
+      const existingPhotos=photos.filter(x=>/^https?:/.test(x)); const newPhotos=photos.filter(x=>x.startsWith('data:')); const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,phone,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),existingPhotos,photosData:newPhotos,photoContentTypes:newPhotos.map(()=> 'image/jpeg')});
       if(r.data.profile){setPhotos(r.data.profile.photos?.length?r.data.profile.photos:(r.data.profile.photo?[r.data.profile.photo]:[]));setPhoto(r.data.profile.photo||'');setSaved(true);await onSaved();}
     }catch(e:any){alert('Could not save your profile. '+String(e?.message||'Please try again.'));}finally{setSaving(false);}
   };
