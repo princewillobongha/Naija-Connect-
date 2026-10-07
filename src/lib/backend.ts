@@ -130,12 +130,18 @@ export const api = {
   async post(path:string, body:any) {
     const u=await currentUser(); if(!u) throw new Error('Sign in required');
     if(path==='/api/profile'){
-      let photo=body.photoData ? await uploadMedia(u.id,body.photoData,body.photoContentType,'profiles') : undefined;
-      const row={id:u.id,name:body.name,age:body.age,gender:body.gender,city:body.city,country:body.country||'Nigeria',bio:body.bio||'',interests:body.interests||[],looking_for:body.lookingFor||'Dating / connection',photo:photo||undefined};
-      const {data,error}=await supabase.from('profiles').upsert(row,{onConflict:'id'}).select().single(); if(error) throw error;
+      let photo:string|undefined;
+      if(body.photoData){
+        try { photo=await uploadMedia(u.id,body.photoData,body.photoContentType,'profiles'); }
+        catch(e:any){ throw new Error('Could not upload your profile photo. ' + String(e?.message || 'Please choose another photo.')); }
+      }
+      const row:any={id:u.id,name:String(body.name||'').trim(),age:Number(body.age),gender:body.gender||null,city:String(body.city||'').trim(),country:body.country||'Nigeria',bio:body.bio||'',interests:Array.isArray(body.interests)?body.interests:[],looking_for:body.lookingFor||'Dating / connection'};
+      if(photo) row.photo=photo;
+      const {data,error}=await supabase.from('profiles').upsert(row,{onConflict:'id'}).select().single();
+      if(error) throw new Error('Could not save profile details. ' + error.message);
       if(body.phone !== undefined){
         const {error:phoneError}=await supabase.from('user_contacts').upsert({user_id:u.id,phone:String(body.phone||'').trim(),updated_at:new Date().toISOString()},{onConflict:'user_id'});
-        if(phoneError) throw phoneError;
+        if(phoneError) throw new Error('Could not save the private phone number. ' + phoneError.message);
       }
       return {data:{profile:mapProfile(data)}};
     }
