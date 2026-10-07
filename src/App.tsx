@@ -50,7 +50,7 @@ type Message = {
   createdAt: number;
 };
 
-const ADMIN_EMAIL = 'ADMIN_EMAIL_PENDING';
+const ADMIN_EMAIL = 'cinddycook@gmail.com';
 
 function isAdminUser(user: any) {
   return String(user?.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase();
