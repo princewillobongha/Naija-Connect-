@@ -186,7 +186,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [path, setPath] = useState(route());
 
-  const refresh = async () => {
+  const refresh = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
       const u = await auth.getUser();
       setUser(u);
@@ -214,22 +215,27 @@ function App() {
         'Some live data could not be loaded yet. Demo profiles remain available.'
       );
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
   useEffect(() => {
     const syncRoute = () => setPath(route());
     syncRoute();
-    refresh();
+    refresh(true);
+    const initialLoadingTimeout = window.setTimeout(() => setLoading(false), 8000);
     window.addEventListener('hashchange', syncRoute);
     const { data: listener } = auth.onAuthStateChange?.((event, session) => {
       setUser(session?.user ? { ...session.user, userId: session.user.id, name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Member' } : null);
       if (event === 'SIGNED_IN') { window.location.hash = '#/discover'; setPath('/discover'); setNotice('You are signed in successfully.'); }
       else if (event === 'SIGNED_OUT') { window.location.hash = '#/'; setPath('/'); }
       else setPath(route());
-      window.setTimeout(() => refresh(), 0);
+      window.setTimeout(() => refresh(false), 0);
     }) || { data: { subscription: null } };
-    return () => { window.removeEventListener('hashchange', syncRoute); listener?.subscription?.unsubscribe?.(); };
+    return () => {
+      window.clearTimeout(initialLoadingTimeout);
+      window.removeEventListener('hashchange', syncRoute);
+      listener?.subscription?.unsubscribe?.();
+    };
   }, []);
   useEffect(() => {
     if (notice) {
@@ -242,13 +248,15 @@ function App() {
     try {
       await auth.signIn({ email });
       setNotice('Secure sign-in link sent. Check your inbox to continue.');
-      return true;
+      return { ok: true, message: '' };
     } catch (e: any) {
       const message = String(e?.message || '');
-      setNotice(/rate limit|too many requests/i.test(message)
-        ? 'Email sending is temporarily rate-limited by Supabase. Please wait a few minutes before requesting another sign-in link.'
-        : message || 'Sign-in could not be completed. Please try again.');
-      return false;
+      const rateLimited = /rate limit|too many requests|429|over_email_send_rate_limit|over_request_rate_limit/i.test(message);
+      const friendly = rateLimited
+        ? 'Email sending is temporarily rate-limited. Please wait before requesting another link. You do not need to create another account.'
+        : message || 'Sign-in could not be completed. Please try again.';
+      setNotice(friendly);
+      return { ok: false, message: friendly };
     }
   };
   const signOut = async () => {
@@ -454,13 +462,47 @@ function Feature({
   );
 }
 
-function Login({ signIn }: { signIn: (email?: string) => Promise<boolean> }) {
+function Login({ signIn }: { signIn: (email?: string) => Promise<{ok:boolean;message:string}> }) {
   const [email,setEmail]=useState('');
   const [sent,setSent]=useState(false);
   const [busy,setBusy]=useState(false);
-  const [cooldown,setCooldown]=useState(0);
-  useEffect(()=>{if(cooldown<=0)return;const t=window.setInterval(()=>setCooldown(v=>Math.max(0,v-1)),1000);return()=>window.clearInterval(t);},[cooldown]);
-  const submit=async()=>{const clean=email.trim();if(!/^\S+@\S+\.\S+$/.test(clean)||busy||cooldown>0)return;setBusy(true);try{const ok=await signIn(clean);if(ok){setSent(true);setCooldown(60);}}finally{setBusy(false);}};
+  const [error,setError]=useState('');
+  const [cooldown,setCooldown]=useState(()=>{
+    try { return Math.max(0, Math.ceil((Number(sessionStorage.getItem('naija_connect_auth_cooldown')||0)-Date.now())/1000)); }
+    catch { return 0; }
+  });
+  useEffect(()=>{
+    if(cooldown<=0)return;
+    const t=window.setInterval(()=>setCooldown(v=>{
+      const next=Math.max(0,v-1);
+      if(next===0){try{sessionStorage.removeItem('naija_connect_auth_cooldown')}catch{}}
+      return next;
+    }),1000);
+    return()=>window.clearInterval(t);
+  },[cooldown]);
+  const submit=async()=>{
+    const clean=email.trim();
+    if(!/^\S+@\S+\.\S+$/.test(clean)||busy||cooldown>0)return;
+    setBusy(true); setError('');
+    try{
+      const result=await signIn(clean);
+      if(result.ok){
+        setSent(true);
+        const until=Date.now()+60000;
+        setCooldown(60);
+        try{sessionStorage.setItem('naija_connect_auth_cooldown',String(until))}catch{}
+      } else {
+        setError(result.message);
+        if(/rate limit|too many requests|429|over_email_send_rate_limit|over_request_rate_limit/i.test(result.message)){
+          const until=Date.now()+60000;
+          setCooldown(60);
+          try{sessionStorage.setItem('naija_connect_auth_cooldown',String(until))}catch{}
+        }
+      }
+    } catch(e:any) {
+      setError(e?.message||'Sign-in could not be completed. Please try again.');
+    } finally { setBusy(false); }
+  };
   return (
     <section className="center-page">
       <div className="auth-card auth-card-professional">
@@ -468,6 +510,7 @@ function Login({ signIn }: { signIn: (email?: string) => Promise<boolean> }) {
         <span className="eyebrow auth-eyebrow">SECURE MEMBER ACCESS</span>
         <h1>Welcome to NaijaConnect</h1>
         <p>Sign in with your email. We’ll send you a secure one-time link — no password to remember.</p>
+        {error && <div className="auth-error" role="alert"><strong>We couldn't send the link.</strong><span>{error}</span></div>}
         {!sent ? <>
           <label className="email-field"><span>Email address</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="you@example.com" autoComplete="email"/></label>
           <button type="button" className="primary full auth-submit" disabled={busy||cooldown>0||!/^\S+@\S+\.\S+$/.test(email.trim())} onClick={submit}>
