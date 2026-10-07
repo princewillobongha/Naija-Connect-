@@ -618,19 +618,27 @@ function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Pro
   const p=profiles.find(x=>x.id===id)||demoProfiles.find(x=>x.id===id);
   const own=!!user&&p?.id===user.userId;
   const [menu,setMenu]=useState(false);
+  const [slide,setSlide]=useState(0);
+  const [blocked,setBlocked]=useState(false);
+  const photos=(p?.photos&&p.photos.length?p.photos:(p?.photo?[p.photo]:[]));
   if(!p)return <Empty title="Profile not found" text="This profile may have been removed." action={()=>go('/discover')} actionText="Back to discover"/>;
   const share=async()=>{try{if(navigator.share) await navigator.share({title:'NaijaConnect profile',text:'Check out '+p.name+' on NaijaConnect.',url:window.location.href});else await navigator.clipboard.writeText(window.location.href);setMenu(false);}catch{}};
+  const report=async()=>{const reason=window.prompt('Why are you reporting this profile?','Suspicious or fake profile');if(!reason)return;try{await api.post('/api/reports',{profileId:p.id,reason});setMenu(false);alert('Report submitted. Thank you for helping keep NaijaConnect safe.');}catch(e:any){alert(e?.message||'Could not submit the report.');}};
+  const block=async()=>{if(!window.confirm('Block '+p.name+'? You will no longer see this profile in Discover.'))return;try{const r=await api.post('/api/blocks',{profileId:p.id});setBlocked(!!r.data.blocked);setMenu(false);if(r.data.blocked){alert('Profile blocked.');go('/discover');}}catch(e:any){alert(e?.message||'Could not block this profile.');}};
   return <section className="detail-page"><button className="back-link" onClick={()=>go('/discover')}>← Back to discover</button><div className="profile-detail">
-    <div className="detail-photo">{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}</div>
+    <div>
+      <div className="detail-photo">{photos.length? <img src={photos[slide%photos.length]} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i></div>
+      {photos.length>1&&<div className="photo-thumbs">{photos.map((src,i)=><button key={src+i} className={i===slide?'photo-thumb active':'photo-thumb'} onClick={()=>setSlide(i)}><img src={src} alt="" /></button>)}</div>}
+    </div>
     <div className="detail-copy">
-      <div className="detail-topline"><div><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'} {p.verified&&' • VERIFIED'}</div><h1>{p.name}</h1><div className="detail-age">{p.age} years old</div></div><div className="profile-more-wrap"><button className="icon-square" onClick={()=>setMenu(v=>!v)} aria-label="More profile options"><MoreHorizontal/></button>{menu&&<div className="profile-more-menu"><button onClick={share}>Share profile</button><button onClick={()=>{setMenu(false);go('/safety')}}>Safety & report</button></div>}</div></div>
+      <div className="detail-topline"><div><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'} {p.verified&&' • VERIFIED'}</div><h1>{p.name}</h1><div className="detail-age">{p.age} years old</div></div><div className="profile-more-wrap"><button className="icon-square" onClick={()=>setMenu(v=>!v)} aria-label="More profile options"><MoreHorizontal/></button>{menu&&<div className="profile-more-menu"><button onClick={share}>Share profile</button>{!own&&<><button onClick={report}>Report profile</button><button onClick={block}>Block profile</button></>}</div>}</div></div>
       <div className="detail-location"><MapPin size={18}/>{p.city}, {p.country}</div>
+      <div className="profile-status-card"><span className={p.online?'status-dot online':'status-dot'}></span><div><strong>{p.online?'Online now':'Recently active'}</strong><small>Available to connect through NaijaConnect</small></div></div>
       <p className="big-bio">{p.bio||'This member has not added a bio yet.'}</p>
       <div className="detail-section"><h3>About</h3><p>{p.city}, {p.country}</p></div>
       {p.interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div>}
       <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div>
       {!own&&<div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
-      
       {own&&<button className="primary" onClick={()=>go('/profile')}>Edit my profile</button>}
     </div>
   </div></section>
