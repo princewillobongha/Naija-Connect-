@@ -39,12 +39,14 @@ async function getPosts() {
 }
 export const auth = {
   async getUser(){ return currentUser(); },
-  async signIn(){
-    const email = window.prompt('Enter your email address to receive a secure NaijaConnect sign-in link:');
-    if (!email) throw new Error('Sign-in cancelled');
-    const { error } = await supabase.auth.signInWithOtp({ email, options:{ emailRedirectTo: window.location.origin }});
+  async signIn({email}:{email?:string} = {}){
+    const clean = (email || '').trim();
+    if (!clean) throw new Error('Please enter your email address.');
+    const redirectTo = window.location.hostname === 'localhost'
+      ? window.location.origin
+      : 'https://naija-connect-cdp-esport.vercel.app/';
+    const { error } = await supabase.auth.signInWithOtp({ email: clean, options:{ emailRedirectTo: redirectTo }});
     if (error) throw error;
-    alert('Check your email for your secure NaijaConnect sign-in link.');
   },
   async signOut(){ await supabase.auth.signOut(); }
 };
