@@ -130,7 +130,11 @@ export const api = {
     if(path==='/api/profile'){
       let photo=body.photoData ? await uploadMedia(u.id,body.photoData,body.photoContentType,'profiles') : undefined;
       const row={id:u.id,name:body.name,age:body.age,gender:body.gender,city:body.city,country:body.country||'Nigeria',bio:body.bio||'',interests:body.interests||[],looking_for:body.lookingFor||'Dating / connection',photo:photo||undefined};
-      const {data,error}=await supabase.from('profiles').upsert(row).select().single(); if(error) throw error;
+      const {data,error}=await supabase.from('profiles').upsert(row,{onConflict:'id'}).select().single(); if(error) throw error;
+      if(body.phone !== undefined){
+        const {error:phoneError}=await supabase.from('user_contacts').upsert({user_id:u.id,phone:String(body.phone||'').trim(),updated_at:new Date().toISOString()},{onConflict:'user_id'});
+        if(phoneError) throw phoneError;
+      }
       return {data:{profile:mapProfile(data)}};
     }
     if(path==='/api/posts'){
@@ -162,9 +166,12 @@ export const api = {
     }
     if(path==='/api/likes'){
       const {data:existing}=await supabase.from('likes').select('*').eq('user_id',u.id).eq('profile_id',body.profileId).maybeSingle();
-      if(!existing){const {error}=await supabase.from('likes').insert({user_id:u.id,profile_id:body.profileId});if(error)throw error;}
-      const {data:back}=await supabase.from('likes').select('*').eq('user_id',body.profileId).eq('profile_id',u.id).maybeSingle();
-      return {data:{matched:!!back}};
+      if(existing){
+        const {error}=await supabase.from('likes').delete().eq('user_id',u.id).eq('profile_id',body.profileId); if(error) throw error;
+        return {data:{liked:false}};
+      }
+      const {error}=await supabase.from('likes').insert({user_id:u.id,profile_id:body.profileId}); if(error) throw error;
+      return {data:{liked:true}};
     }
     if(path==='/api/connection-requests'){
       const {data,error}=await supabase.from('connection_requests').insert({user_id:u.id,user_name:u.user_metadata?.full_name||u.email?.split('@')[0]||'Member',email:u.email||'',profile_id:body.profileId,profile_name:body.profileName}).select().single();if(error)throw error;return {data:{request:data}};
@@ -173,8 +180,13 @@ export const api = {
       const {data,error}=await supabase.from('messages').insert({sender_id:u.id,receiver_id:body.receiverId,text:body.text}).select().single();if(error)throw error;return {data:{message:{id:data.id,senderId:data.sender_id,receiverId:data.receiver_id,text:data.text,createdAt:new Date(data.created_at).getTime()}}};
     }
     if(path==='/api/admin/messages'){
-      if(!ADMIN_EMAIL || u.email?.toLowerCase()!==ADMIN_EMAIL.toLowerCase()) throw new Error('Unauthorized');
-      const {data,error}=await supabase.from('admin_messages').insert({user_id:body.userId,text:body.text}).select().single();if(error)throw error;return {data:{message:data}};
+      const admin = u.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      const targetUserId = admin ? body.userId : u.id;
+      if(!targetUserId) throw new Error('Recipient is required.');
+      const senderType = admin ? 'admin' : 'user';
+      const {data,error}=await supabase.from('admin_messages').insert({user_id:targetUserId,text:String(body.text||'').trim(),sender_type:senderType}).select().single();
+      if(error) throw error;
+      return {data:{message:{id:data.id,userId:data.user_id,senderType:data.sender_type,text:data.text,createdAt:new Date(data.created_at).getTime()}}};
     }
     if(path==='/api/subscriptions') return {data:{}};
     throw new Error('Unsupported POST '+path);
