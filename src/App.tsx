@@ -214,17 +214,14 @@ function App() {
     }
   }, [notice]);
 
-  const signIn = async () => {
+  const signIn = async (email?: string) => {
     try {
-      await auth.signIn({ scope: 'openid email profile offline_access' });
+      await auth.signIn({ email });
       await refresh();
+      if (email) setNotice('Secure sign-in link sent. Check your inbox to continue.');
       go('/discover');
     } catch (e: any) {
-      setNotice(
-        e?.code === 'popup_blocked'
-          ? 'Please allow popups to sign in.'
-          : 'Sign-in was cancelled or failed.'
-      );
+      setNotice(e?.message || 'Sign-in could not be completed. Please try again.');
     }
   };
   const signOut = async () => {
@@ -409,20 +406,34 @@ function Feature({
   );
 }
 
-function Login({ signIn }: { signIn: () => void }) {
+function Login({ signIn }: { signIn: (email?: string) => void }) {
+  const [email,setEmail]=useState('');
+  const [sent,setSent]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const submit=async()=>{const clean=email.trim();if(!/^\S+@\S+\.\S+$/.test(clean))return;setBusy(true);try{await signIn(clean);setSent(true);}finally{setBusy(false);}};
   return (
     <section className="center-page">
-      <div className="auth-card">
+      <div className="auth-card auth-card-professional">
         <div className="brand-large">N</div>
+        <span className="eyebrow auth-eyebrow">SECURE MEMBER ACCESS</span>
         <h1>Welcome to NaijaConnect</h1>
-        <p>Sign in to create your profile, like people, match and chat.</p>
-        <button className="primary full" onClick={signIn}>
-          <LogIn size={18} /> Continue with secure sign-in
-        </button>
-        <small className="legal">
-          By continuing, you confirm that you are 18 or older and agree to use
-          the platform respectfully.
-        </small>
+        <p>Sign in with your email. We’ll send you a secure one-time link — no password to remember.</p>
+        {!sent ? <>
+          <label className="email-field">
+            <span>Email address</span>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="you@example.com" autoComplete="email"/>
+          </label>
+          <button className="primary full auth-submit" disabled={busy||!email.trim()} onClick={submit}>
+            {busy ? 'Sending secure link…' : <><LogIn size={18}/> Send secure sign-in link</>}
+          </button>
+        </> : <div className="email-sent">
+          <div className="email-sent-icon">✓</div>
+          <strong>Check your email</strong>
+          <p>We sent a secure NaijaConnect sign-in link to <b>{email}</b>.</p>
+          <button className="secondary full" onClick={()=>setSent(false)}>Use a different email</button>
+        </div>}
+        <div className="auth-security"><ShieldCheck size={16}/><span>Your email is used only for account access.</span></div>
+        <small className="legal">By continuing, you confirm that you are 18 or older and agree to use the platform respectfully.</small>
       </div>
     </section>
   );
