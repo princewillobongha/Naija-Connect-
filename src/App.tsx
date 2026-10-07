@@ -335,7 +335,7 @@ function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;sig
   return <header className="topbar">
     <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
     <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/community')}>Community</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
-    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>signIn()}><LogIn size={17}/> Sign in</button>}</div>
+    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
     {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/community')}}><MessageCircle size={17}/> Community</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
   </header>;
 }
@@ -355,11 +355,11 @@ function Home({ user, signIn }: { user: any; signIn: () => void }) {
           find a mutual match and start a conversation.
         </p>
         <div className="hero-actions">
-          <button className="primary" onClick={() => go('/discover')}>
+          <button className="primary" onClick={() => user ? go('/discover') : go('/login')}>
             Discover people <ChevronRight size={18} />
           </button>
           {!user && (
-            <button className="secondary" onClick={()=>signIn()}>
+            <button className="secondary" onClick={()=>go('/login')}>
               Create your profile
             </button>
           )}
@@ -453,7 +453,7 @@ function Login({ signIn }: { signIn: (email?: string) => Promise<boolean> }) {
             <span>Email address</span>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="you@example.com" autoComplete="email"/>
           </label>
-          <button className="primary full auth-submit" disabled={busy||!email.trim()} onClick={submit}>
+          <button type="button" className="primary full auth-submit" disabled={busy||!/^\S+@\S+\.\S+$/.test(email.trim())} onClick={submit}>
             {busy ? 'Sending secure link…' : <><LogIn size={18}/> Send secure sign-in link</>}
           </button>
         </> : <div className="email-sent">
