@@ -71,6 +71,17 @@ export const auth = {
     const { error } = await supabase.auth.signInWithPassword({ email: clean, password });
     if (error) throw error;
   },
+  async requestPasswordReset(email:string, redirectTo:string){
+    const clean = String(email || '').trim();
+    if (!clean) throw new Error('Enter your email address.');
+    const { error } = await supabase.auth.resetPasswordForEmail(clean, { redirectTo });
+    if (error) throw error;
+  },
+  async updatePassword(password:string){
+    if (!password || password.length < 8) throw new Error('Password must be at least 8 characters.');
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  },
   async signUpWithPassword(email:string, password:string){
     const clean = String(email || '').trim();
     if (!clean || !password) throw new Error('Enter your email and password.');
