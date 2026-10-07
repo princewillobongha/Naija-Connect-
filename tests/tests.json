@@ -1,0 +1,89 @@
+[
+  {
+    "name": "Discover and open a complete profile",
+    "sanity": true,
+    "viewport": "desktop",
+    "covers": [
+      "homepage navigation",
+      "discover page",
+      "profile detail page",
+      "page-based routing"
+    ],
+    "description": "Verifies the core public discovery journey uses separate pages and a profile opens as its own route.",
+    "steps": [
+      "Open the homepage",
+      "Tap Discover people",
+      "Tap a profile card",
+      "Tap Back to discover"
+    ],
+    "expected": "Discover and the selected profile open as separate views/routes, and the back action returns to Discover."
+  },
+  {
+    "name": "Sign in and create a Nigerian profile",
+    "viewport": "mobile",
+    "covers": [
+      "authentication",
+      "protected profile creation",
+      "database create/update",
+      "18+ validation"
+    ],
+    "description": "Verifies a signed-in adult can create a profile with required identity and location fields.",
+    "steps": [
+      "Open the sign-in page",
+      "Complete secure sign-in",
+      "Open My Profile",
+      "Enter a display name, age 18 or older, city and bio",
+      "Save profile"
+    ],
+    "expected": "The profile saves successfully and the account can reopen My Profile with the saved information."
+  },
+  {
+    "name": "Like another person and create a mutual match",
+    "viewport": "desktop",
+    "covers": [
+      "likes",
+      "mutual matching",
+      "matches page",
+      "protected interaction"
+    ],
+    "description": "Verifies authenticated users can like another profile and mutual likes become a match.",
+    "steps": [
+      "Sign in as Actor A",
+      "Open Discover",
+      "Like another adult profile",
+      "Use Actor B to like Actor A back",
+      "Open Matches"
+    ],
+    "expected": "The mutual connection appears in Matches and can be opened for messaging."
+  },
+  {
+    "name": "Send and receive a private message",
+    "viewport": "mobile",
+    "covers": [
+      "private messaging",
+      "database create/read",
+      "realtime conversation updates",
+      "chat page"
+    ],
+    "description": "Verifies two matched users can open a separate conversation page and exchange a message.",
+    "steps": [
+      "Actor A opens a matched profile",
+      "Open the message page",
+      "Send a respectful message",
+      "Actor B opens the same conversation"
+    ],
+    "expected": "The sent message is visible in the conversation and the recipient can see the updated chat."
+  },
+  {
+    "name": "Block and report safety guidance",
+    "viewport": "desktop",
+    "covers": ["safety page", "privacy guidance", "18+ guardrail"],
+    "description": "Verifies the safety controls page is reachable from the main navigation and explains protective actions.",
+    "steps": [
+      "Open Settings",
+      "Open Safety and privacy",
+      "Review the safety guidance"
+    ],
+    "expected": "A dedicated Safety page opens with blocking, reporting, privacy and 18+ guidance."
+  }
+]
