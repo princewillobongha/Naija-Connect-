@@ -34,7 +34,9 @@ type Profile = {
   interests: string[];
   lookingFor: string;
   photo?: string;
+  photos?: string[];
   online?: boolean;
+  lastActiveAt?: string;
   verified?: boolean;
   latitude?: number;
   longitude?: number;
@@ -570,26 +572,45 @@ function Login({ signIn, signUp }: { signIn: (email?: string, password?: string)
 }
 
 function Discover({profiles,onLike,interested}:{profiles:Profile[],onLike:(id:string)=>void,interested?:Set<string>}){
-  const [city,setCity]=useState('All Nigeria'); const [gender,setGender]=useState('Everyone'); const [maxAge,setMaxAge]=useState(45); const [query,setQuery]=useState('');
-  const nearby=false;
-  const filtered=useMemo(()=>profiles.filter(p=>
-    p && Array.isArray(p.interests) &&
-    (!nearby || p.distanceKm !== undefined) &&
-    (city==='All Nigeria' ? p.country==='Nigeria' : city==='Worldwide' || city==='Nearby' ? true : p.city===city) &&
-    (gender==='Everyone'||p.gender===gender) && p.age<=maxAge &&
-    (!query || (p.name+' '+p.city+' '+p.interests.join(' ')).toLowerCase().includes(query.toLowerCase()))
-  ),[profiles,city,gender,maxAge,query,nearby]);
+  const [city,setCity]=useState('All Nigeria');
+  const [gender,setGender]=useState('Everyone');
+  const [lookingFor,setLookingFor]=useState('Everyone');
+  const [maxAge,setMaxAge]=useState(45);
+  const [query,setQuery]=useState('');
+  const [onlineOnly,setOnlineOnly]=useState(false);
+  const [verifiedOnly,setVerifiedOnly]=useState(false);
+  const cities=['All Nigeria','Lagos','Abuja','Port Harcourt','Calabar','Enugu','Ibadan','Benin City','Kano','Kaduna','Owerri','Uyo','Worldwide'];
+  const filtered=useMemo(()=>profiles.filter(p=>{
+    if(!p)return false;
+    const text=(p.name+' '+p.city+' '+p.interests.join(' ')+' '+p.bio).toLowerCase();
+    return (city==='All Nigeria' ? p.country==='Nigeria' : city==='Worldwide' ? true : p.city.toLowerCase()===city.toLowerCase())
+      && (gender==='Everyone'||p.gender===gender)
+      && (lookingFor==='Everyone'||p.lookingFor===lookingFor)
+      && p.age<=maxAge
+      && (!query||text.includes(query.toLowerCase()))
+      && (!onlineOnly||p.online)
+      && (!verifiedOnly||p.verified);
+  }),[profiles,city,gender,lookingFor,maxAge,query,onlineOnly,verifiedOnly]);
+  const cityCounts=cities.filter(c=>c!=='Worldwide').map(c=>({city:c,count:profiles.filter(p=>c==='All Nigeria'?p.country==='Nigeria':p.city.toLowerCase()===c.toLowerCase()).length}));
   return <section className="content-page">
-    <div className="page-heading"><div><span className="eyebrow">DISCOVER</span><h1>People</h1><p>Browse member profiles. Everyone with an account can discover new members.</p></div><button className="outline-btn" onClick={()=>go('/settings')}><SlidersHorizontal size={17}/> Preferences</button></div>
-    <div className="filter-panel"><label><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search name, city or interest"/></label><select value={city} onChange={e=>setCity(e.target.value)}><option>All Nigeria</option><option>Lagos</option><option>Abuja</option><option>Port Harcourt</option><option>Calabar</option><option>Kano</option><option>Worldwide</option></select><select value={gender} onChange={e=>setGender(e.target.value)}><option>Everyone</option><option>Woman</option><option>Man</option></select><select value={maxAge} onChange={e=>setMaxAge(Number(e.target.value))}><option value="25">18–25</option><option value="35">18–35</option><option value="45">18–45</option><option value="60">18–60</option></select></div>
-      <div className="profile-grid">{filtered.map(p=><ProfileCard key={p.id} p={p} onLike={onLike} interested={interested?.has(p.id) || false}/>)}{!filtered.length&&<Empty title="No people found" text="Try widening your filters or exploring worldwide."/>}</div>
+    <div className="page-heading"><div><span className="eyebrow">DISCOVER</span><h1>Find people near you</h1><p>Search members by city, age, interests and what they are looking for.</p></div><button className="outline-btn" onClick={()=>go('/settings')}><SlidersHorizontal size={17}/> Preferences</button></div>
+    <div className="directory-search"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search name, city or interest"/></div>
+    <div className="city-chips">{cityCounts.map(x=><button key={x.city} className={city===x.city?'city-chip active':'city-chip'} onClick={()=>setCity(x.city)}>{x.city}<small>{x.count}</small></button>)}</div>
+    <div className="filter-panel dating-filter-panel">
+      <select value={city} onChange={e=>setCity(e.target.value)}>{cities.map(x=><option key={x}>{x}</option>)}</select>
+      <select value={gender} onChange={e=>setGender(e.target.value)}><option>Everyone</option><option>Woman</option><option>Man</option><option>Non-binary</option></select>
+      <select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Everyone</option><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select>
+      <select value={maxAge} onChange={e=>setMaxAge(Number(e.target.value))}><option value="25">18–25</option><option value="35">18–35</option><option value="45">18–45</option><option value="60">18–60</option></select>
+    </div>
+    <div className="quick-filters"><button className={onlineOnly?'quick-filter active':'quick-filter'} onClick={()=>setOnlineOnly(v=>!v)}>🟢 Online now</button><button className={verifiedOnly?'quick-filter active':'quick-filter'} onClick={()=>setVerifiedOnly(v=>!v)}>✓ Verified</button><span>{filtered.length} profile{filtered.length===1?'':'s'} found</span></div>
+    <div className="profile-grid">{filtered.map(p=><ProfileCard key={p.id} p={p} onLike={onLike} interested={interested?.has(p.id) || false}/>)}{!filtered.length&&<Empty title="No people found" text="Try another city, age range or filter." action={()=>{setCity('All Nigeria');setGender('Everyone');setLookingFor('Everyone');setMaxAge(60);setOnlineOnly(false);setVerifiedOnly(false);setQuery('')}} actionText="Clear filters"/>}</div>
   </section>
 }
 
 function ProfileCard({p,onLike,interested}:{p:Profile,onLike:(id:string)=>void,interested?:boolean}){
   return <article className="profile-card">
-    <button className="profile-photo" onClick={()=>go('/profile/'+p.id)}>{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i></button>
-    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.verified&&<ShieldCheck size={15}/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?`${p.distanceKm.toFixed(1)} km away`:`${p.city}, ${p.country}`}</span><p>{p.bio}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className={interested?'like-btn active':'like-btn'} onClick={()=>onLike(p.id)}><Heart size={17} fill={interested?'currentColor':'none'}/> {interested?'Interested':'Interested'}</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
+    <button className="profile-photo" onClick={()=>go('/profile/'+p.id)}>{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i>{p.verified&&<b className="verified-float">✓</b>}</button>
+    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.verified&&<ShieldCheck size={15}/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?p.distanceKm.toFixed(1)+' km away':p.city+', '+p.country}</span><div className="activity-line">{p.online?<span className="online-text">● Online now</span>:<span>Recently active</span>}</div><p>{p.bio||'New to NaijaConnect — say hello.'}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className={interested?'like-btn active':'like-btn'} onClick={()=>onLike(p.id)}><Heart size={17} fill={interested?'currentColor':'none'}/> Interested</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
   </article>
 }
 
