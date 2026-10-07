@@ -993,3 +993,5 @@ h1 {
 .admin-delete-member:hover{background:rgba(127,29,29,.3);}
 .account-delete-row{border-color:rgba(248,113,113,.2)!important;}
 .account-delete-row strong{color:#fca5a5;}
+
+.auth-signup-line{display:block;line-height:1.35;}.auth-signup-link{font-weight:700;margin-top:2px;}
