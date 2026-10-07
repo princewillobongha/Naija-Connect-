@@ -814,7 +814,49 @@ function ChatPage({
   );
 }
 
-async function compressProfileImage(file: File): Promise<{data:string;type:string}> { const bitmap=await createImageBitmap(file); const maxSide=1600; const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height)); const canvas=document.createElement('canvas'); canvas.width=Math.max(1,Math.round(bitmap.width*scale)); canvas.height=Math.max(1,Math.round(bitmap.height*scale)); const ctx=canvas.getContext('2d'); if(!ctx) throw new Error('Could not prepare the selected photo.'); ctx.drawImage(bitmap,0,0,canvas.width,canvas.height); bitmap.close(); return {data:canvas.toDataURL('image/jpeg',0.82),type:'image/jpeg'}; }
+async function compressProfileImage(file: File): Promise<{data:string;type:string}> {
+  let source: Blob = file;
+  const lower = file.name.toLowerCase();
+  const heicLike = /\.(heic|heif)$/i.test(lower) || /image\/(heic|heif)/i.test(file.type);
+  if (heicLike) {
+    const mod:any = await import('heic2any');
+    const converted:any = await mod.default({blob:file,toType:'image/jpeg',quality:0.82});
+    source = Array.isArray(converted) ? converted[0] : converted;
+  }
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(source);
+  } catch {
+    const url = URL.createObjectURL(source);
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve,reject)=>{
+        const img = new Image();
+        img.onload=()=>resolve(img);
+        img.onerror=()=>reject(new Error('Image decode failed.'));
+        img.src=url;
+      });
+      const maxSide=1600;
+      const scale=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
+      canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+      const ctx=canvas.getContext('2d');
+      if(!ctx) throw new Error('Could not prepare the selected photo.');
+      ctx.drawImage(image,0,0,canvas.width,canvas.height);
+      return {data:canvas.toDataURL('image/jpeg',0.82),type:'image/jpeg'};
+    } finally { URL.revokeObjectURL(url); }
+  }
+  const maxSide=1600;
+  const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+  canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+  const ctx=canvas.getContext('2d');
+  if(!ctx) throw new Error('Could not prepare the selected photo.');
+  ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+  bitmap.close();
+  return {data:canvas.toDataURL('image/jpeg',0.82),type:'image/jpeg'};
+}
 
 function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved:()=>void}){
   const [name,setName]=useState(profile?.name||user?.name||''); const [phone,setPhone]=useState(''); const [age,setAge]=useState(String(profile?.age||25)); const [gender,setGender]=useState(profile?.gender||''); const [city,setCity]=useState(profile?.city||''); const [bio,setBio]=useState(profile?.bio||''); const [lookingFor,setLookingFor]=useState(profile?.lookingFor||'Dating / connection'); const [interests,setInterests]=useState(profile?.interests.join(', ')||''); const [photo,setPhoto]=useState(profile?.photo||''); const [photoData,setPhotoData]=useState(''); const [photoFile,setPhotoFile]=useState<File|null>(null); const [savedProfileId,setSavedProfileId]=useState<string|null>(profile?.id||null); const [saved,setSaved]=useState(false); const [photoType,setPhotoType]=useState('image/jpeg'); const [location,setLocation]=useState(profile?.latitude!==undefined&&profile?.longitude!==undefined?{latitude:profile.latitude,longitude:profile.longitude}:null); const [saving,setSaving]=useState(false); const [locating,setLocating]=useState(false);
@@ -822,8 +864,10 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
   if(!user)return <Empty title="Create your profile" text="Sign in to create a profile that other members can discover." action={()=>go('/login')} actionText="Sign in"/>;
   const pickPhoto=async(file?:File)=>{
     if(!file)return;
-    if(!/^image\/(jpeg|png|webp)$/i.test(file.type)){
-      alert('Please choose a JPEG, PNG or WebP photo.');
+    const isSupportedType=/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type);
+    const isSupportedExtension=/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
+    if(!isSupportedType && !isSupportedExtension){
+      alert('Please choose a JPEG, PNG, WebP or HEIC/HEIF photo.');
       return;
     }
     if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}
@@ -834,7 +878,7 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
       setPhoto(prepared.data);
       setPhotoData(prepared.data);
     }catch(e:any){
-      alert('That photo could not be decoded by your browser. Please choose a JPEG, PNG or WebP photo.');
+      alert('We could not read that photo. Please choose a clear JPEG, PNG, WebP or HEIC/HEIF photo and try again.');
     }
   };
   const fileToDataUrl=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=reject;reader.readAsDataURL(file);});

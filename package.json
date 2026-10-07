@@ -12,7 +12,8 @@
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@supabase/supabase-js": "^2.76.0"
+    "@supabase/supabase-js": "^2.76.0",
+    "heic2any": "^0.0.4"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.0.0"
