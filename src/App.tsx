@@ -20,7 +20,7 @@ import {
   Menu,
 } from 'lucide-react';
 
-type Post = { id:string; userId:string; text:string; photo?:string; createdAt:number; author:Profile };
+type Post = { id:string; userId:string; text:string; photo?:string; photos?:string[]; createdAt:number; author:Profile; likes?:number; likedByMe?:boolean; comments?:any[] };
 
 type Profile = {
   id: string;
@@ -241,10 +241,10 @@ function App() {
     }
     try {
       const r = await api.post('/api/likes', { profileId: id });
-      setNotice(r.data.matched ? 'It’s a mutual connection!' : 'Interested sent.');
+      setNotice(r.data.matched ? '❤️ It’s a mutual connection!' : '❤️ You’re interested in this profile.');
       await refresh();
     } catch {
-      setNotice('Could not send the like. Please try again.');
+      setNotice('Could not save your interest. Please try again.');
     }
   };
 
@@ -255,10 +255,18 @@ function App() {
     const body = encodeURIComponent(`Hello NaijaConnect Admin,\n\nI am interested in connecting with ${p.name}, age ${p.age}, from ${p.city}, ${p.country}.\n\nProfile ID: ${p.id}\n\nPlease help connect us.\n\nThank you.`);
     window.location.href = `mailto:${ADMIN_EMAIL}?subject=${subject}&body=${body}`;
   };
-  const createPost = async (text:string, photoData:string, photoType:string) => { try { const r = await api.post('/api/posts', {text, photoData, photoContentType:photoType}); setPosts(old => [r.data.post, ...old]); setNotice('Post published.'); } catch { setNotice('Could not publish the post.'); } };
+  const createPost = async (text:string, photosData:string[], photoTypes:string[]) => {
+    try {
+      const r = await api.post('/api/posts', {text, photosData, photoContentTypes:photoTypes});
+      setPosts(old => [r.data.post, ...old]);
+      setNotice('Post published.');
+    } catch (e:any) {
+      setNotice(e?.message || 'Could not publish the post. Please try again.');
+    }
+  };
   const path = route();
-  const publicPages =
-    path === '/' || path === '/login' || path.startsWith('/profile/');
+  const publicPages = path === '/' || path === '/login' || path.startsWith('/profile/');
+  const protectedPage = !publicPages;
   if (loading)
     return (
       <div className="loading-screen">
@@ -273,10 +281,12 @@ function App() {
       <Header user={user} profile={profile} signIn={signIn} signOut={signOut} />
       {notice && <div className="toast">{notice}</div>}
       <main className="page-wrap">
-        {path === '/' && <Home user={user} signIn={signIn} />}
+        {!user && protectedPage && <Login signIn={signIn} />}
+        {user && path === '/' && <Home user={user} signIn={signIn} />}
+        {path === '/' && !user && <Home user={user} signIn={signIn} />}
         {path === '/login' && <Login signIn={signIn} />}
-        {path === '/discover' && <Discover profiles={profiles} onLike={like} />}
-        {path === '/posts' && <Posts posts={posts} onCreatePost={createPost} user={user} />}
+        {user && path === '/discover' && <Discover profiles={profiles} onLike={like} />}
+        {user && path === '/posts' && <Posts posts={posts} onCreatePost={createPost} onLikePost={async(id)=>{try{const r=await api.post('/api/post-likes',{postId:id});setPosts(old=>old.map(p=>p.id===id?{...p,likes:r.data.likes,likedByMe:r.data.liked}:p));}catch{setNotice('Could not update the reaction.');}}} onComment={async(id,text)=>{try{const r=await api.post('/api/post-comments',{postId:id,text});setPosts(old=>old.map(p=>p.id===id?{...p,comments:[...(p.comments||[]),r.data.comment]}:p));}catch{setNotice('Could not add your comment.');}}} />}
         {path.startsWith('/profile/') && (
           <ProfilePage
             id={path.split('/')[2]}
@@ -288,10 +298,10 @@ function App() {
         )}
         {path === '/admin' && isAdminUser(user) && <AdminPage />}
         {path === '/admin-messages' && user && <AdminMessages />}
-        {path === '/profile' && (
+        {user && path === '/profile' && (
           <MyProfile user={user} profile={profile} onSaved={refresh} />
         )}
-        {path === '/settings' && <SettingsPage user={user} signOut={signOut} />}
+        {user && path === '/settings' && <SettingsPage user={user} signOut={signOut} />}
         {path === '/safety' && <SafetyPage />}
       </main>
 
@@ -805,37 +815,53 @@ function AdminMessages(){
   return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">MESSAGES</span><h1>Admin Messages</h1><p>Only official NaijaConnect Admin messages appear here.</p></div></div><div className="admin-message-list">{messages.map(m=><article className="admin-message" key={m.id}><div className="admin-message-head"><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span><small>{new Date(m.createdAt).toLocaleString()}</small></div><p>{m.text}</p></article>)}{!messages.length&&<div className="empty-mini">No admin messages yet.</div>}</div></section>;
 }
 
-function Posts({posts,onCreatePost,user}:{posts:Post[],onCreatePost:(text:string,photoData:string,photoType:string)=>Promise<void>,user:any}){
-  const [text,setText]=useState(''); const [photo,setPhoto]=useState(''); const [photoType,setPhotoType]=useState('image/jpeg'); const [busy,setBusy]=useState(false);
-  const pick=(file?:File)=>{if(!file)return;if(!file.type.startsWith('image/')){alert('Please choose an image file.');return;}if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}const reader=new FileReader();reader.onload=()=>{setPhoto(String(reader.result||''));setPhotoType(file.type);};reader.readAsDataURL(file);};
-  const publish=async()=>{if(!text.trim()&&!photo)return;setBusy(true);try{await onCreatePost(text.trim(),photo.includes(',')?photo.split(',')[1]:photo,photoType);setText('');setPhoto('');}finally{setBusy(false);}};
-  if(!user)return <Empty title="Sign in to view posts" text="Members can share text and photos with the NaijaConnect community." action={()=>go('/login')} actionText="Sign in"/>;
-  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">COMMUNITY</span><h1>Posts</h1><p>Every new post is visible to signed-in members. No device location is required.</p></div></div><div className="post-composer"><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Share something with the community…"/><div className="post-compose-row"><label className="photo-picker">Add photo<input type="file" accept="image/*" onChange={e=>pick(e.target.files?.[0])}/></label><button className="primary" disabled={busy||(!text.trim()&&!photo)} onClick={publish}>{busy?'Posting…':'Post'}</button></div>{photo&&<img className="post-preview" src={photo} alt="Preview"/>}</div><div className="post-feed">{posts.map(p=><article className="post-card" key={p.id}><div className="post-author"><Avatar p={p.author}/><span><strong>{p.author.name}, {p.author.age}</strong><small>{p.author.city}, {p.author.country} • {new Date(p.createdAt).toLocaleString()}</small></span></div>{p.text&&<p className="post-text">{p.text}</p>}{p.photo&&<img className="post-image" src={p.photo} alt="Community post"/>}<button className="post-profile-link" onClick={()=>go('/profile/'+p.author.id)}>View {p.author.name}'s profile <ChevronRight size={15}/></button></article>)}{!posts.length&&<Empty title="No posts yet" text="Be the first member to share something."/>}</div></section>
-}
-
-function Empty({
-  title,
-  text,
-  action,
-  actionText,
-}: {
-  title: string;
-  text: string;
-  action?: () => void;
-  actionText?: string;
-}) {
-  return (
-    <div className="empty">
-      <div className="empty-icon">♡</div>
-      <h2>{title}</h2>
-      <p>{text}</p>
-      {action && (
-        <button className="primary" onClick={action}>
-          {actionText}
-        </button>
-      )}
+function Posts({posts,onCreatePost,onLikePost,onComment}:{posts:Post[],onCreatePost:(text:string,photosData:string[],photoTypes:string[])=>Promise<void>,onLikePost:(id:string)=>Promise<void>,onComment:(id:string,text:string)=>Promise<void>}) {
+  const [text,setText]=useState('');
+  const [photos,setPhotos]=useState<string[]>([]);
+  const [photoTypes,setPhotoTypes]=useState<string[]>([]);
+  const [busy,setBusy]=useState(false);
+  const [showFeeling,setShowFeeling]=useState(false);
+  const [commentText,setCommentText]=useState<Record<string,string>>({});
+  const pick=(files:FileList|null)=>{
+    if(!files)return;
+    const selected=Array.from(files).slice(0,8);
+    selected.forEach(file=>{
+      if(!file.type.startsWith('image/'))return;
+      if(file.size>15*1024*1024)return;
+      const reader=new FileReader();
+      reader.onload=()=>{setPhotos(old=>[...old,String(reader.result||'')]);setPhotoTypes(old=>[...old,file.type]);};
+      reader.readAsDataURL(file);
+    });
+  };
+  const publish=async()=>{
+    if(!text.trim()&&!photos.length)return;
+    setBusy(true);
+    try{await onCreatePost(text.trim(),photos.map(x=>x.includes(',')?x.split(',')[1]:x),photoTypes);setText('');setPhotos([]);setPhotoTypes([]);setShowFeeling(false);}
+    finally{setBusy(false);}
+  };
+  return <section className="content-page">
+    <div className="page-heading"><div><span className="eyebrow">COMMUNITY</span><h1>Community</h1><p>Share updates, photos and moments with signed-in NaijaConnect members.</p></div></div>
+    <div className="facebook-composer">
+      <div className="composer-head"><Avatar p={{name:'You',photo:undefined} as Profile}/><div><strong>Create a post</strong><small>Share with the NaijaConnect community</small></div></div>
+      <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="What's on your mind?"/>
+      {showFeeling&&<div className="feeling-row">{['😊','❤️','😂','🔥','🥰','🎉','😎','🙏'].map(x=><button key={x} onClick={()=>setText(t=>t+x)}>{x}</button>)}</div>}
+      {photos.length>0&&<div className={photos.length===1?'post-photo-grid single':'post-photo-grid'}>{photos.map((p,i)=><div className="composer-photo" key={i}><img src={p} alt="Selected post"/><button onClick={()=>{setPhotos(x=>x.filter((_,j)=>j!==i));setPhotoTypes(x=>x.filter((_,j)=>j!==i));}} aria-label="Remove photo"><X size={15}/></button></div>)}</div>}
+      <div className="composer-actions"><label className="composer-action"><span>📷</span> Photo / video<input type="file" accept="image/*" multiple onChange={e=>pick(e.target.files)}/></label><button className="composer-action" onClick={()=>setShowFeeling(v=>!v)}><span>😊</span> Feeling / activity</button></div>
+      <button className="primary full" disabled={busy||(!text.trim()&&!photos.length)} onClick={publish}>{busy?'Publishing…':'Post'}</button>
     </div>
-  );
+    <div className="post-feed">{posts.map(p=>{
+      const pics=p.photos?.length?p.photos:(p.photo?[p.photo]:[]);
+      return <article className="post-card" key={p.id}>
+        <div className="post-author"><Avatar p={p.author}/><span><strong>{p.author.name}</strong><small>{p.author.city}, {p.author.country} • {new Date(p.createdAt).toLocaleString()}</small></span></div>
+        {p.text&&<p className="post-text">{p.text}</p>}
+        {pics.length>0&&<div className={pics.length===1?'post-photo-grid single':'post-photo-grid'}>{pics.map((src,i)=><img className="post-feed-image" key={i} src={src} alt="Community post"/></div>)}
+        <div className="post-engagement"><span>{p.likes||0} {(p.likes||0)===1?'Like':'Likes'}</span><span>{p.comments?.length||0} {(p.comments?.length||0)===1?'Comment':'Comments'}</span></div>
+        <div className="post-actions"><button className={p.likedByMe?'post-action active':'post-action'} onClick={()=>onLikePost(p.id)}><Heart size={18} fill={p.likedByMe?'currentColor':'none'}/> Like</button><button className="post-action" onClick={()=>document.getElementById('comment-'+p.id)?.focus()}><MessageCircle size={18}/> Comment</button><button className="post-action" onClick={()=>go('/profile/'+p.author.id)}>View profile</button></div>
+        <div className="comment-list">{(p.comments||[]).map((cm:any)=><div className="comment" key={cm.id}><Avatar p={cm.author}/><div><strong>{cm.author?.name||'Member'}</strong><p>{cm.text}</p></div></div>)}</div>
+        <div className="comment-compose"><input id={'comment-'+p.id} value={commentText[p.id]||''} onChange={e=>setCommentText(v=>({...v,[p.id]:e.target.value}))} onKeyDown={async e=>{if(e.key==='Enter'&&(commentText[p.id]||'').trim()){const value=commentText[p.id].trim();setCommentText(v=>({...v,[p.id]:''}));await onComment(p.id,value);}}} placeholder="Write a comment…"/><button onClick={async()=>{const value=(commentText[p.id]||'').trim();if(!value)return;setCommentText(v=>({...v,[p.id]:''}));await onComment(p.id,value);}}>Post</button></div>
+      </article>
+    })}{!posts.length&&<Empty title="No posts yet" text="Be the first member to share something."/>}</div>
+  </section>;
 }
 
-export default App;
+
