@@ -249,6 +249,13 @@ export const api = {
     if(path==='/api/messages'){
       const {data,error}=await supabase.from('messages').insert({sender_id:u.id,receiver_id:body.receiverId,text:body.text}).select().single();if(error)throw error;return {data:{message:{id:data.id,senderId:data.sender_id,receiverId:data.receiver_id,text:data.text,createdAt:new Date(data.created_at).getTime()}}};
     }
+    if(path==='/api/admin/verify-user'){
+      if(!isAdminUser(u)) throw new Error('Unauthorized');
+      if(!body.userId) throw new Error('User is required.');
+      const {data,error}=await supabase.from('profiles').update({verified:!!body.verified}).eq('id',body.userId).select().single();
+      if(error) throw error;
+      return {data:{profile:mapProfile(data)}};
+    }
     if(path==='/api/admin/messages'){
       const admin = isAdminUser(u);
       const targetUserId = admin ? body.userId : u.id;
