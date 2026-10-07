@@ -74,7 +74,8 @@ export const auth = {
     const { error } = await supabase.auth.signInWithOtp({ email: clean, options:{ emailRedirectTo: redirectTo, shouldCreateUser:true }});
     if (error) throw error;
   },
-  async signOut(){ await supabase.auth.signOut(); }
+  async signOut(){ await supabase.auth.signOut(); },
+  onAuthStateChange(callback:(event:string, session:any)=>void){ return supabase.auth.onAuthStateChange(callback); }
 };
 export const api = {
   async get(path:string) {
