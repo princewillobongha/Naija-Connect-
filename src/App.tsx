@@ -219,10 +219,14 @@ function App() {
     }
   };
   useEffect(() => {
-    const syncRoute = () => setPath(route());
+    const syncRoute = () => {
+      const next = route();
+      setPath(next);
+      if (next === '/login' || next === '/') setLoading(false);
+    };
     syncRoute();
     refresh(true);
-    const initialLoadingTimeout = window.setTimeout(() => setLoading(false), 8000);
+    const initialLoadingTimeout = window.setTimeout(() => setLoading(false), 4000);
     window.addEventListener('hashchange', syncRoute);
     const { data: listener } = auth.onAuthStateChange?.((event, session) => {
       setUser(session?.user ? { ...session.user, userId: session.user.id, name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Member' } : null);
@@ -313,7 +317,7 @@ function App() {
   };
   const publicPages = path === '/' || path === '/login' || path.startsWith('/profile/');
   const protectedPage = !publicPages;
-  if (loading)
+  if (loading && path !== '/login' && path !== '/')
     return (
       <div className="loading-screen">
         <div className="brand-mark">N</div>
@@ -323,6 +327,7 @@ function App() {
     );
 
   return (
+    <AppErrorBoundary>
     <div className="app-shell">
       <Header user={user} profile={profile} signIn={signIn} signOut={signOut} />
       {notice && <div className="toast">{notice}</div>}
@@ -352,6 +357,7 @@ function App() {
       </main>
 
     </div>
+    </AppErrorBoundary>
   );
 }
 
