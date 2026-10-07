@@ -562,7 +562,7 @@ function Login({ signIn, signUp }: { signIn: (email?: string, password?: string)
       {mode==='signin' && <button type="button" className="text-button" onClick={()=>{setMode('forgot');setError('');}}>Forgot password?</button>}
       {mode==='signup' && <label className="email-field"><span>Confirm password</span><input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="Enter your password again" autoComplete="new-password"/></label>}
       <button type="button" className="primary full auth-submit" disabled={busy} onClick={submit}>{busy ? (mode==='signin'?'Signing in…':'Creating account…') : (mode==='signin'?<><LogIn size={18}/> Sign in</>:<>Create account <ChevronRight size={18}/></>)}</button>
-      <button type="button" className="secondary full" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setError('');}}>{mode==='signin'?<>New to NaijaConnect?<br/><strong>Create an account</strong></>:'Already have an account? Sign in'}</button>
+      <button type="button" className="secondary full" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setError('');}}>{mode==='signin'?<><span className="auth-signup-line">New to NaijaConnect?</span><span className="auth-signup-line auth-signup-link">Create an account</span></>:'Already have an account? Sign in'}</button>
       <div className="auth-security"><ShieldCheck size={16}/><span>Your password is securely handled by Supabase Auth.</span></div>
       <small className="legal">By continuing, you confirm that you are 18 or older and agree to use the platform respectfully.</small>
     </div></section>
