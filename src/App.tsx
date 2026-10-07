@@ -440,7 +440,6 @@ function Login({ signIn, signUp }: { signIn: (email?: string, password?: string)
 }
 
 
-export default App;
 
 function Discover({profiles,onLike,interested}:{profiles:Profile[],onLike:(id:string)=>void,interested?:Set<string>}){
   const [city,setCity]=useState('All Nigeria'); const [gender,setGender]=useState('Everyone'); const [maxAge,setMaxAge]=useState(45); const [query,setQuery]=useState('');
