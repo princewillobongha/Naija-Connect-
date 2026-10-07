@@ -205,7 +205,8 @@ function App() {
     refresh();
     const on = () => refresh();
     window.addEventListener('hashchange', on);
-    return () => window.removeEventListener('hashchange', on);
+    const { data: listener } = auth.onAuthStateChange?.(() => refresh()) || { data: { subscription: null } };
+    return () => { window.removeEventListener('hashchange', on); listener?.subscription?.unsubscribe?.(); };
   }, []);
   useEffect(() => {
     if (notice) {
@@ -217,11 +218,11 @@ function App() {
   const signIn = async (email?: string) => {
     try {
       await auth.signIn({ email });
-      await refresh();
-      if (email) setNotice('Secure sign-in link sent. Check your inbox to continue.');
-      go('/discover');
+      setNotice('Secure sign-in link sent. Check your inbox to continue.');
+      return true;
     } catch (e: any) {
       setNotice(e?.message || 'Sign-in could not be completed. Please try again.');
+      return false;
     }
   };
   const signOut = async () => {
@@ -416,11 +417,11 @@ function Feature({
   );
 }
 
-function Login({ signIn }: { signIn: (email?: string) => void }) {
+function Login({ signIn }: { signIn: (email?: string) => Promise<boolean> }) {
   const [email,setEmail]=useState('');
   const [sent,setSent]=useState(false);
   const [busy,setBusy]=useState(false);
-  const submit=async()=>{const clean=email.trim();if(!/^\S+@\S+\.\S+$/.test(clean))return;setBusy(true);try{await signIn(clean);setSent(true);}finally{setBusy(false);}};
+  const submit=async()=>{const clean=email.trim();if(!/^\S+@\S+\.\S+$/.test(clean))return;setBusy(true);try{const ok=await signIn(clean);if(ok)setSent(true);}finally{setBusy(false);}};
   return (
     <section className="center-page">
       <div className="auth-card auth-card-professional">
