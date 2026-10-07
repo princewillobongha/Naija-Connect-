@@ -1055,30 +1055,20 @@ function Avatar({ p }: { p: Profile }) {
   );
 }
 function AdminPage(){
-  const [users,setUsers]=useState<any[]>([]);
-  const [selected,setSelected]=useState<any>(null);
-  const [messages,setMessages]=useState<any[]>([]);
-  const [text,setText]=useState('');
-  const [status,setStatus]=useState('');
-  const loadUsers=async()=>{try{const r=await api.get('/api/admin/users');setUsers(r.data.users||[]);}catch{setStatus('Admin access is unavailable.');}};
+  const [users,setUsers]=useState<any[]>([]); const [reports,setReports]=useState<any[]>([]);
+  const [selected,setSelected]=useState<any>(null); const [messages,setMessages]=useState<any[]>([]); const [text,setText]=useState(''); const [status,setStatus]=useState(''); const [tab,setTab]=useState<'members'|'reports'>('members');
+  const loadUsers=async()=>{try{const r=await api.get('/api/admin/users');setUsers(r.data.users||[]);}catch(e:any){setStatus(e?.message||'Admin member directory could not be loaded.');}};
+  const loadReports=async()=>{try{const r=await api.get('/api/admin/reports');setReports(r.data.reports||[]);}catch(e:any){setStatus(e?.message||'Reports could not be loaded.');}};
   const loadThread=async(userId:string)=>{try{const r=await api.get('/api/admin/messages?userId='+encodeURIComponent(userId));setMessages(r.data.messages||[]);}catch{setMessages([]);}};
-  useEffect(()=>{loadUsers();},[]);
+  useEffect(()=>{loadUsers();loadReports();},[]);
   const select=async(u:any)=>{setSelected(u);setStatus('');await loadThread(u.id);};
   const send=async()=>{if(!selected||!text.trim())return;try{await api.post('/api/admin/messages',{userId:selected.id,text:text.trim()});setText('');setStatus('Message sent.');await loadThread(selected.id);}catch(e:any){setStatus(e?.message||'Could not send the admin message.');}};
-  const deleteUser=async(u:any)=>{
-    if(!window.confirm('Delete '+(u.name||'this member')+' permanently? This removes their account, profile and related member data. This cannot be undone.')) return;
-    try{
-      await api.post('/api/admin/delete-user',{userId:u.id});
-      setUsers(old=>old.filter(x=>x.id!==u.id));
-      if(selected?.id===u.id){setSelected(null);setMessages([]);}
-      setStatus('Member account deleted.');
-    }catch(e:any){setStatus(e?.message||'Could not delete this member.');}
-  };
-  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>Admin Inbox</h1><p>Only the official NaijaConnect admin can start conversations. Members can reply only to the admin.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div>
-    <div className="admin-layout">
-      <div className="admin-requests">{users.map(u=><div className="admin-member-row" key={u.id}><button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)} aria-label={'Delete '+(u.name||'member')} title="Delete member">Delete</button></div>)}{!users.length&&<div className="empty-mini">No member profiles yet.</div>}</div>
-      <div className="admin-chat">{selected?<><div className="admin-chat-head"><ShieldCheck/><span><strong>NaijaConnect Admin</strong><small>Official admin → {selected.name}</small></span></div><div className="admin-thread">{messages.map(m=><div key={m.id} className={m.senderType==='admin'?'admin-bubble mine':'admin-bubble'}><small>{m.senderType==='admin'?'ADMIN':selected.name}</small><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}{!messages.length&&<div className="empty-mini">No messages yet. Start the conversation.</div>}</div><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message to this member…"/><button className="primary" onClick={send}>Send as Admin</button></>:<div className="empty-mini">Select any member to message them.</div>}{status&&<small className="admin-status">{status}</small>}</div>
-    </div>
+  const deleteUser=async(u:any)=>{if(!window.confirm('Delete '+(u.name||'this member')+' permanently? This cannot be undone.'))return;try{await api.post('/api/admin/delete-user',{userId:u.id});setUsers(old=>old.filter(x=>x.id!==u.id));if(selected?.id===u.id){setSelected(null);setMessages([]);}setStatus('Member account deleted.');}catch(e:any){setStatus(e?.message||'Could not delete this member.');}};
+  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>NaijaConnect Admin</h1><p>Manage members, messages, safety reports and moderation.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div>
+    <div className="admin-tabs"><button className={tab==='members'?'admin-tab active':'admin-tab'} onClick={()=>setTab('members')}>Members <span>{users.length}</span></button><button className={tab==='reports'?'admin-tab active':'admin-tab'} onClick={()=>setTab('reports')}>Reports <span>{reports.filter(x=>x.status==='open').length}</span></button></div>
+    {tab==='members'?<div className="admin-layout"><div className="admin-requests">{users.map(u=><div className="admin-member-row" key={u.id}><button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)}>Delete</button></div>)}{!users.length&&<div className="empty-mini">{status||'No member profiles yet.'}</div>}</div>
+      <div className="admin-chat">{selected?<><div className="admin-chat-head"><ShieldCheck/><span><strong>NaijaConnect Admin</strong><small>Official admin → {selected.name}</small></span></div><div className="admin-thread">{messages.map(m=><div key={m.id} className={m.senderType==='admin'?'admin-bubble mine':'admin-bubble'}><small>{m.senderType==='admin'?'ADMIN':selected.name}</small><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}{!messages.length&&<div className="empty-mini">No messages yet. Start the conversation.</div>}</div><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message to this member…"/><button className="primary" onClick={send}>Send as Admin</button></>:<div className="empty-mini">Select any member to message them.</div>}{status&&<small className="admin-status">{status}</small>}</div></div>
+      :<div className="admin-report-list">{reports.map(r=><article className="admin-report-card" key={r.id}><div><strong>{r.reported?.name||'Member'}</strong><small>Reported by {r.reporter?.name||'Member'} • {new Date(r.createdAt).toLocaleString()}</small></div><span className="report-reason">{r.reason}</span>{r.details&&<p>{r.details}</p>}<small>Status: {r.status}</small></article>)}{!reports.length&&<div className="empty-mini">No safety reports yet.</div>}</div>}
   </section>;
 }
 
