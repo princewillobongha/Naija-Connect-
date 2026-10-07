@@ -13,7 +13,9 @@ async function currentUser() {
 }
 function mapProfile(p:any) {
   if (!p) return null;
-  return { id:p.id, userId:p.id, name:String(p.name||'Member'), age:Number(p.age||18), gender:p.gender||'', city:String(p.city||'Nigeria'), country:String(p.country||'Nigeria'), bio:String(p.bio||''), interests:Array.isArray(p.interests)?p.interests.map((x:any)=>String(x)).filter(Boolean):[], lookingFor:String(p.looking_for||'Dating / connection'), photo:p.photo||undefined, photos:Array.isArray(p.photos)?p.photos.filter(Boolean):(p.photo?[p.photo]:[]), online:!!p.online, verified:!!p.verified, latitude:p.latitude, longitude:p.longitude, lastActiveAt:p.last_active_at||undefined };
+  const lastActive=p.last_active_at ? new Date(p.last_active_at).getTime() : 0;
+  const online=lastActive ? Date.now()-lastActive < 15*60*1000 : !!p.online;
+  return { id:p.id, userId:p.id, name:String(p.name||'Member'), age:Number(p.age||18), gender:p.gender||'', city:String(p.city||'Nigeria'), country:String(p.country||'Nigeria'), bio:String(p.bio||''), interests:Array.isArray(p.interests)?p.interests.map((x:any)=>String(x)).filter(Boolean):[], lookingFor:String(p.looking_for||'Dating / connection'), photo:p.photo||undefined, photos:Array.isArray(p.photos)?p.photos.filter(Boolean):(p.photo?[p.photo]:[]), online, verified:!!p.verified, latitude:p.latitude, longitude:p.longitude, lastActiveAt:p.last_active_at||undefined };
 }
 async function dataUrlToBlob(data:string, contentType:string) {
   const raw = data.includes(',') ? data.split(',')[1] : data;
