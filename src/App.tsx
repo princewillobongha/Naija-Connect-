@@ -261,25 +261,18 @@ function App() {
         setPath('/discover');
         return { ok: true, message: '' };
       }
-      // With Confirm Email disabled, a real new account should return a session.
-      // If Supabase returns no session, verify whether this email is an existing
-      // account by trying the supplied password once.
-      try {
-        await auth.signInWithPassword(email, password);
-        setNotice('You are signed in successfully.');
-        window.location.hash = '#/discover';
-        setPath('/discover');
-        return { ok: true, message: '' };
-      } catch {
-        const message = 'This email is already registered, but that password does not match. Tap Forgot password? to create a new password.';
-        setNotice(message);
-        return { ok: false, message };
-      }
+      const message = 'Account creation needs email confirmation before you can sign in. Please check your email.';
+      setNotice(message);
+      return { ok: false, message };
     } catch (e: any) {
       const raw = String(e?.message || '');
-      const message = /already registered|already exists|user already|invalid login credentials/i.test(raw)
-        ? 'This email is already registered, but that password does not match. Tap Forgot password? to create a new password.'
-        : raw || 'Account creation could not be completed.';
+      const message = /already registered|already exists|user already/i.test(raw)
+        ? 'This email is already registered. Tap Sign in, then use Forgot password? if you do not remember the password.'
+        : /invalid.*email|email.*invalid/i.test(raw)
+          ? 'Please enter a valid email address.'
+          : /password.*(weak|short)|weak password|password should/i.test(raw)
+            ? 'Choose a stronger password with at least 8 characters.'
+            : raw || 'Account creation could not be completed.';
       setNotice(message);
       return { ok: false, message };
     }
@@ -354,7 +347,7 @@ function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;sig
   const admin=isAdminUser(user);
   return <header className="topbar">
     <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
-    <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/community')}>Community</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
+    <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
     <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
     {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
   </header>;
@@ -772,7 +765,7 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
   const pickPhoto=(file?:File)=>{if(!file)return;if(!file.type.startsWith('image/'))return;if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}setPhotoFile(file);setPhotoType(file.type);const reader=new FileReader();reader.onload=()=>setPhoto(String(reader.result||''));reader.readAsDataURL(file);};
   const fileToDataUrl=(file:File)=>new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=reject;reader.readAsDataURL(file);});
   const save=async()=>{if(!name.trim()||Number(age)<18||!city.trim()){alert('Name, age 18+ and city are required.');return;}setSaving(true);setSaved(false);try{const freshPhotoData=photoFile?await fileToDataUrl(photoFile):photoData;const r=await api.post('/api/profile',{name,age:Number(age),gender,city,country:'Nigeria',bio,lookingFor,interests:interests.split(',').map(x=>x.trim()).filter(Boolean),photoData:freshPhotoData,photoContentType:photoType});if(r.data.profile){setSavedProfileId(r.data.profile.id);setPhoto(r.data.profile.photo||photo);setPhotoData('');setPhotoFile(null);setSaved(true);await onSaved();}}catch{alert('Could not save your profile. Please try again.');}finally{setSaving(false);}};
-  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Your photo, bio, interests and what you are looking for will appear on your public profile for signed-in members to discover.</p></div></div><div className="form-card"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="upload-label">Profile photo<input type="file" accept="image/*" onChange={e=>pickPhoto(e.target.files?.[0])}/><small>Your selected photo appears above immediately. Images up to 25 MB are supported.</small></label><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div><strong>Your profile has been saved.</strong><small>Your photo, bio, interests and details are now visible to signed-in members.</small></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
+  return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Your photo, bio, interests and what you are looking for will appear on your public profile for signed-in members to discover.</p></div></div><div className="form-card"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="upload-label">Profile photo<input type="file" accept="image/*" onChange={e=>pickPhoto(e.target.files?.[0])}/><small>Your selected photo appears above immediately. Images up to 25 MB are supported.</small></label><label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div><label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city is shown on your profile. Device GPS is not required.</small></span></div><label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label><label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label><label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label><button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your photo, bio, interests and details are now visible to signed-in members.</span></div>{savedProfileId&&<button className="secondary" onClick={()=>go('/profile/'+savedProfileId)}>Tap to see profile <ChevronRight size={16}/></button>}</div>}</div></section>
 }
 
 function SettingsPage({ user, signOut }: { user: any; signOut: () => void }) {
