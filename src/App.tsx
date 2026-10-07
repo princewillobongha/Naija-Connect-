@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, auth, ws } from '@appdeploy/client';
+import { api, auth, ws } from './lib/backend';
 import {
   Heart,
   MessageCircle,
