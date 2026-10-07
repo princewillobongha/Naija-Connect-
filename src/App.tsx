@@ -174,6 +174,7 @@ function App() {
   const [profiles, setProfiles] = useState<Profile[]>(demoProfiles);
   const [matches, setMatches] = useState<Match[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [demoInterested, setDemoInterested] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -183,16 +184,22 @@ function App() {
       setUser(u);
       const profileUrl = '/api/profiles';
       if (u) {
-        const [me, people, postsResponse] = await Promise.all([
+        const [meResult, peopleResult] = await Promise.allSettled([
           api.get('/api/me'),
           api.get(profileUrl),
-          api.get('/api/posts'),
         ]);
-        setProfile(me.data.profile || null);
-        setProfiles(
-          people.data.profiles?.length ? people.data.profiles : demoProfiles
-        );
-        setPosts(postsResponse.data.posts || []);
+        if (meResult.status === 'fulfilled') setProfile(meResult.value.data.profile || null);
+        if (peopleResult.status === 'fulfilled') {
+          const liveProfiles = peopleResult.value.data.profiles || [];
+          setProfiles(liveProfiles.length ? liveProfiles : demoProfiles);
+        }
+        try {
+          const postsResponse = await api.get('/api/posts');
+          setPosts(postsResponse.data.posts || []);
+        } catch (postError:any) {
+          setPosts([]);
+          setNotice(postError?.message || 'Community posts could not be loaded.');
+        }
       }
     } catch (e) {
       setNotice(
@@ -241,11 +248,23 @@ function App() {
       return;
     }
     try {
+      if (id.startsWith('demo-')) {
+        setDemoInterested(old => {
+          const next = new Set(old);
+          if (next.has(id)) next.delete(id); else next.add(id);
+          return next;
+        });
+        setNotice('❤️ Your interest has been saved.');
+        return;
+      }
+      if (id === user.userId) {
+        setNotice('You cannot mark your own profile as interested.');
+        return;
+      }
       const r = await api.post('/api/likes', { profileId: id });
       setNotice(r.data.matched ? '❤️ It’s a mutual connection!' : '❤️ You’re interested in this profile.');
-      await refresh();
-    } catch {
-      setNotice('Could not save your interest. Please try again.');
+    } catch (e:any) {
+      setNotice(e?.message || 'Could not save your interest. Please try again.');
     }
   };
 
@@ -287,7 +306,7 @@ function App() {
         {path === '/' && !user && <Home user={user} signIn={signIn} />}
         {path === '/login' && <Login signIn={signIn} />}
         {user && path === '/discover' && <Discover profiles={profiles} onLike={like} />}
-        {user && path === '/posts' && <Posts posts={posts} onCreatePost={createPost} onLikePost={async(id)=>{try{const r=await api.post('/api/post-likes',{postId:id});setPosts(old=>old.map(p=>p.id===id?{...p,likes:r.data.likes,likedByMe:r.data.liked}:p));}catch{setNotice('Could not update the reaction.');}}} onComment={async(id,text)=>{try{const r=await api.post('/api/post-comments',{postId:id,text});setPosts(old=>old.map(p=>p.id===id?{...p,comments:[...(p.comments||[]),r.data.comment]}:p));}catch{setNotice('Could not add your comment.');}}} />}
+        {user && (path === '/posts' || path === '/community') && <Posts posts={posts} onCreatePost={createPost} onLikePost={async(id)=>{try{const r=await api.post('/api/post-likes',{postId:id});setPosts(old=>old.map(p=>p.id===id?{...p,likes:r.data.likes,likedByMe:r.data.liked}:p));}catch{setNotice('Could not update the reaction.');}}} onComment={async(id,text)=>{try{const r=await api.post('/api/post-comments',{postId:id,text});setPosts(old=>old.map(p=>p.id===id?{...p,comments:[...(p.comments||[]),r.data.comment]}:p));}catch{setNotice('Could not add your comment.');}}} />}
         {path.startsWith('/profile/') && (
           <ProfilePage
             id={path.split('/')[2]}
@@ -315,9 +334,9 @@ function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;sig
   const admin=isAdminUser(user);
   return <header className="topbar">
     <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
-    <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/posts')}>Posts</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
+    <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/community')}>Community</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
     <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>signIn()}><LogIn size={17}/> Sign in</button>}</div>
-    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/posts')}}><MessageCircle size={17}/> Community Posts</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
+    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/community')}}><MessageCircle size={17}/> Community</button><button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
   </header>;
 }
 
@@ -450,7 +469,7 @@ function Login({ signIn }: { signIn: (email?: string) => Promise<boolean> }) {
   );
 }
 
-function Discover({profiles,onLike}:{profiles:Profile[],onLike:(id:string)=>void}){
+function Discover({profiles,onLike,interested}:{profiles:Profile[],onLike:(id:string)=>void,interested?:Set<string>}){
   const [city,setCity]=useState('All Nigeria'); const [gender,setGender]=useState('Everyone'); const [maxAge,setMaxAge]=useState(45); const [query,setQuery]=useState('');
   const nearby=false;
   const filtered=useMemo(()=>profiles.filter(p=>
@@ -462,14 +481,14 @@ function Discover({profiles,onLike}:{profiles:Profile[],onLike:(id:string)=>void
   return <section className="content-page">
     <div className="page-heading"><div><span className="eyebrow">DISCOVER</span><h1>People</h1><p>Browse member profiles. Everyone with an account can discover new members.</p></div><button className="outline-btn" onClick={()=>go('/settings')}><SlidersHorizontal size={17}/> Preferences</button></div>
     <div className="filter-panel"><label><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search name, city or interest"/></label><select value={city} onChange={e=>setCity(e.target.value)}><option>All Nigeria</option><option>Lagos</option><option>Abuja</option><option>Port Harcourt</option><option>Calabar</option><option>Kano</option><option>Worldwide</option></select><select value={gender} onChange={e=>setGender(e.target.value)}><option>Everyone</option><option>Woman</option><option>Man</option></select><select value={maxAge} onChange={e=>setMaxAge(Number(e.target.value))}><option value="25">18–25</option><option value="35">18–35</option><option value="45">18–45</option><option value="60">18–60</option></select></div>
-      <div className="profile-grid">{filtered.map(p=><ProfileCard key={p.id} p={p} onLike={onLike}/>)}{!filtered.length&&<Empty title="No people found" text="Try widening your filters or exploring worldwide."/>}</div>
+      <div className="profile-grid">{filtered.map(p=><ProfileCard key={p.id} p={p} onLike={onLike} interested={p.id.startsWith('demo-') ? demoInterested.has(p.id) : false}/>)}{!filtered.length&&<Empty title="No people found" text="Try widening your filters or exploring worldwide."/>}</div>
   </section>
 }
 
-function ProfileCard({p,onLike}:{p:Profile,onLike:(id:string)=>void}){
+function ProfileCard({p,onLike,interested}:{p:Profile,onLike:(id:string)=>void,interested?:boolean}){
   return <article className="profile-card">
     <button className="profile-photo" onClick={()=>go('/profile/'+p.id)}>{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i></button>
-    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.verified&&<ShieldCheck size={15}/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?`${p.distanceKm.toFixed(1)} km away`:`${p.city}, ${p.country}`}</span><p>{p.bio}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className="like-btn" onClick={()=>onLike(p.id)}><Heart size={17}/> Interested</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
+    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.verified&&<ShieldCheck size={15}/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?`${p.distanceKm.toFixed(1)} km away`:`${p.city}, ${p.country}`}</span><p>{p.bio}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className={interested?'like-btn active':'like-btn'} onClick={()=>onLike(p.id)}><Heart size={17} fill={interested?'currentColor':'none'}/> {interested?'Interested':'Interested'}</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
   </article>
 }
 
@@ -804,13 +823,14 @@ function SafetyPage() {
 }
 
 function Avatar({ p }: { p: Profile }) {
+  const safe = p || ({name:'Member',photo:undefined} as Profile);
   return (
     <span className="avatar">
-      {p.photo ? (
-        <img src={p.photo} alt="" />
+      {safe.photo ? (
+        <img src={safe.photo} alt="" />
       ) : (
-        <span style={{ background: avatarColor(p.name) }}>
-          {initials(p.name)}
+        <span style={{ background: avatarColor(safe.name) }}>
+          {initials(safe.name)}
         </span>
       )}
     </span>
