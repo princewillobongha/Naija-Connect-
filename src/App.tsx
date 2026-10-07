@@ -896,16 +896,32 @@ function Avatar({ p }: { p: Profile }) {
   );
 }
 function AdminPage(){
-  const [requests,setRequests]=useState<any[]>([]); const [selected,setSelected]=useState<any>(null); const [text,setText]=useState(''); const [status,setStatus]=useState('');
-  useEffect(()=>{(async()=>{try{const r=await api.get('/api/admin/requests');setRequests(r.data.requests||[]);}catch{setStatus('Admin email is not configured yet.');}})();},[]);
-  const send=async()=>{if(!selected||!text.trim())return;try{await api.post('/api/admin/messages',{userId:selected.userId,text:text.trim()});setText('');setStatus('Message sent as Admin.');}catch{setStatus('Could not send the admin message.');}};
-  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>Admin Inbox</h1><p>Only the recognized admin can send messages to members.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div><div className="admin-layout"><div className="admin-requests">{requests.map(r=><button className={selected?.id===r.id?'admin-request active':'admin-request'} key={r.id} onClick={()=>setSelected(r)}><strong>{r.userName}</strong><small>{r.email||'Member'}</small><small>{r.profileName}</small></button>)}{!requests.length&&<div className="empty-mini">No connection requests yet.</div>}</div><div className="admin-chat">{selected?<><div className="admin-chat-head"><ShieldCheck/><span><strong>NaijaConnect Admin</strong><small>Official admin account → {selected.userName}</small></span></div><p className="admin-context">Interested in <strong>{selected.profileName}</strong></p><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message to this member…"/><button className="primary" onClick={send}>Send as Admin</button></>:<div className="empty-mini">Select a connection request.</div>}{status&&<small className="admin-status">{status}</small>}</div></div></section>;
+  const [users,setUsers]=useState<any[]>([]);
+  const [selected,setSelected]=useState<any>(null);
+  const [messages,setMessages]=useState<any[]>([]);
+  const [text,setText]=useState('');
+  const [status,setStatus]=useState('');
+  const loadUsers=async()=>{try{const r=await api.get('/api/admin/users');setUsers(r.data.users||[]);}catch{setStatus('Admin access is unavailable.');}};
+  const loadThread=async(userId:string)=>{try{const r=await api.get('/api/admin/messages?userId='+encodeURIComponent(userId));setMessages(r.data.messages||[]);}catch{setMessages([]);}};
+  useEffect(()=>{loadUsers();},[]);
+  const select=async(u:any)=>{setSelected(u);setStatus('');await loadThread(u.id);};
+  const send=async()=>{if(!selected||!text.trim())return;try{await api.post('/api/admin/messages',{userId:selected.id,text:text.trim()});setText('');setStatus('Message sent.');await loadThread(selected.id);}catch(e:any){setStatus(e?.message||'Could not send the admin message.');}};
+  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>Admin Inbox</h1><p>Only the official NaijaConnect admin can start conversations. Members can reply only to the admin.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div>
+    <div className="admin-layout">
+      <div className="admin-requests">{users.map(u=><button className={selected?.id===u.id?'admin-request active':'admin-request'} key={u.id} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button>)}{!users.length&&<div className="empty-mini">No member profiles yet.</div>}</div>
+      <div className="admin-chat">{selected?<><div className="admin-chat-head"><ShieldCheck/><span><strong>NaijaConnect Admin</strong><small>Official admin → {selected.name}</small></span></div><div className="admin-thread">{messages.map(m=><div key={m.id} className={m.senderType==='admin'?'admin-bubble mine':'admin-bubble'}><small>{m.senderType==='admin'?'ADMIN':selected.name}</small><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}{!messages.length&&<div className="empty-mini">No messages yet. Start the conversation.</div>}</div><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message to this member…"/><button className="primary" onClick={send}>Send as Admin</button></>:<div className="empty-mini">Select any member to message them.</div>}{status&&<small className="admin-status">{status}</small>}</div>
+    </div>
+  </section>;
 }
 
 function AdminMessages(){
   const [messages,setMessages]=useState<any[]>([]);
-  useEffect(()=>{(async()=>{try{const r=await api.get('/api/admin/messages');setMessages(r.data.messages||[]);}catch{}})();},[]);
-  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">MESSAGES</span><h1>Admin Messages</h1><p>Only official NaijaConnect Admin messages appear here.</p></div></div><div className="admin-message-list">{messages.map(m=><article className="admin-message" key={m.id}><div className="admin-message-head"><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span><small>{new Date(m.createdAt).toLocaleString()}</small></div><p>{m.text}</p></article>)}{!messages.length&&<div className="empty-mini">No admin messages yet.</div>}</div></section>;
+  const [text,setText]=useState('');
+  const [busy,setBusy]=useState(false);
+  const load=async()=>{try{const r=await api.get('/api/admin/messages');setMessages(r.data.messages||[]);}catch{}};
+  useEffect(()=>{load();},[]);
+  const send=async()=>{if(!text.trim()||busy)return;setBusy(true);try{await api.post('/api/admin/messages',{text:text.trim()});setText('');await load();}finally{setBusy(false);}};
+  return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>You can reply here. Your replies go only to the official admin account.</p></div></div><div className="admin-message-list">{messages.map(m=><article className={m.senderType==='user'?'admin-message user-reply':'admin-message'} key={m.id}><div className="admin-message-head"><span className="admin-badge"><ShieldCheck size={14}/> {m.senderType==='admin'?'ADMIN':'YOUR REPLY'}</span><small>{new Date(m.createdAt).toLocaleString()}</small></div><p>{m.text}</p></article>)}{!messages.length&&<div className="empty-mini">No admin messages yet.</div>}</div><div className="admin-reply-box"><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Reply to the official NaijaConnect admin…"/><button className="primary" disabled={busy} onClick={send}>{busy?'Sending…':'Reply to admin'}</button></div></section>;
 }
 
 function Posts({posts,onCreatePost,onLikePost,onComment}:{posts:Post[],onCreatePost:(text:string,photosData:string[],photoTypes:string[])=>Promise<void>,onLikePost:(id:string)=>Promise<void>,onComment:(id:string,text:string)=>Promise<void>}) {
