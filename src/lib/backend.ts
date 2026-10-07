@@ -176,7 +176,8 @@ export const api = {
       const row:any={id:u.id,name:String(body.name||'').trim(),age:Number(body.age),gender:body.gender||null,city:String(body.city||'').trim(),country:body.country||'Nigeria',bio:body.bio||'',interests:Array.isArray(body.interests)?body.interests:[],looking_for:body.lookingFor||'Dating / connection',last_active_at:new Date().toISOString(),online:true};
       if(photo) row.photo=photo;
       if(Array.isArray(body.photosData)){
-        const existing = Array.isArray((await supabase.from('profiles').select('photos').eq('id',u.id).maybeSingle()).data?.photos) ? (await supabase.from('profiles').select('photos').eq('id',u.id).maybeSingle()).data.photos : [];
+        const existingResult=await supabase.from('profiles').select('photos').eq('id',u.id).maybeSingle();
+        const existing = Array.isArray(existingResult.data?.photos) ? existingResult.data.photos : [];
         const uploaded:string[]=[];
         for(let i=0;i<body.photosData.length;i++){ if(body.photosData[i]) uploaded.push(await uploadMedia(u.id,body.photosData[i],(body.photoContentTypes||[])[i]||'image/jpeg','profiles')); }
         row.photos=[...existing.filter((x:string)=>!uploaded.includes(x)),...uploaded].slice(-6);
