@@ -877,3 +877,6 @@ function Posts({posts,onCreatePost,onLikePost,onComment}:{posts:Post[],onCreateP
 }
 
 
+
+
+export default App;
