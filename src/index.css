@@ -946,3 +946,14 @@ h1 {
 .bio-field textarea { display: block; width: 100%; max-width: 100%; min-height: 150px; box-sizing: border-box; overflow: auto; overflow-wrap: anywhere; word-break: break-word; }
 .save-success .save-copy { min-width: 0; }
 .save-success .save-copy span { display: block; }
+
+
+.interest-nav { border-radius: 999px; color: #e11d48; }
+.private-note { display:block; margin-top:6px; color: #64748b; font-size:12px; }
+.admin-thread { display:flex; flex-direction:column; gap:10px; max-height:420px; overflow:auto; margin:12px 0; }
+.admin-bubble { max-width:82%; padding:10px 12px; border-radius:14px; background:#f1f5f9; align-self:flex-start; }
+.admin-bubble.mine { align-self:flex-end; background:#ede9fe; }
+.admin-bubble small,.admin-bubble time { display:block; font-size:11px; color:#64748b; }
+.admin-bubble p { margin:4px 0; }
+.admin-reply-box { display:flex; gap:10px; margin-top:16px; }
+.admin-reply-box textarea { flex:1; min-height:90px; resize:vertical; }
