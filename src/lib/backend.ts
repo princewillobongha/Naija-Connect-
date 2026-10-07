@@ -12,7 +12,7 @@ async function currentUser() {
 }
 function mapProfile(p:any) {
   if (!p) return null;
-  return { id:p.id, userId:p.id, name:p.name, age:p.age, gender:p.gender, city:p.city, country:p.country, bio:p.bio||'', interests:p.interests||[], lookingFor:p.looking_for||'Dating / connection', photo:p.photo||undefined, online:p.online||false, verified:p.verified||false, latitude:p.latitude, longitude:p.longitude };
+  return { id:p.id, userId:p.id, name:String(p.name||'Member'), age:Number(p.age||18), gender:p.gender||'', city:String(p.city||'Nigeria'), country:String(p.country||'Nigeria'), bio:String(p.bio||''), interests:Array.isArray(p.interests)?p.interests.map((x:any)=>String(x)).filter(Boolean):[], lookingFor:String(p.looking_for||'Dating / connection'), photo:p.photo||undefined, online:!!p.online, verified:!!p.verified, latitude:p.latitude, longitude:p.longitude };
 }
 async function dataUrlToBlob(data:string, contentType:string) {
   const raw = data.includes(',') ? data.split(',')[1] : data;
@@ -23,8 +23,9 @@ async function uploadMedia(userId:string, data:string, contentType:string, folde
   if (!data) return '';
   const ext = (contentType || 'image/jpeg').split('/')[1] || 'jpeg';
   const path = folder + '/' + userId + '-' + crypto.randomUUID() + '.' + ext;
-  const blob = await dataUrlToBlob(data, contentType);
-  const { error } = await supabase.storage.from('media').upload(path, blob, { contentType: contentType || blob.type || 'image/jpeg', upsert:false });
+  const raw = data.includes(',') ? data.split(',')[1] : data;
+  const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+  const { error } = await supabase.storage.from('media').upload(path, bytes.buffer, { contentType: contentType || 'image/jpeg', cacheControl:'3600', upsert:false });
   if (error) throw new Error('Media upload failed: ' + error.message);
   const { data: pub } = supabase.storage.from('media').getPublicUrl(path);
   return pub.publicUrl;

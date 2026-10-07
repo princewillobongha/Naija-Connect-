@@ -976,3 +976,11 @@ h1 {
 .upload-label input[type=file] { display:none; }
 .upload-label small { display:block; margin-top:7px; }
 @media(max-width:600px){.facebook-admin-chat{min-height:68vh;border-radius:16px}.facebook-admin-thread{min-height:52vh;max-height:62vh;padding:13px 10px}.admin-chat-bubble{max-width:86%}.admin-chat-compose{padding:8px}}
+
+/* Facebook-style profile photo picker */
+.profile-photo-editor{position:relative;width:128px;height:128px;margin:4px 0 22px;}
+.profile-photo-editor .profile-form-avatar{width:128px;height:128px;border-radius:50%;overflow:hidden;display:grid;place-items:center;border:3px solid rgba(255,255,255,.14);background:linear-gradient(135deg,#1e293b,#334155);font-size:34px;font-weight:800;}
+.profile-photo-camera{position:absolute;right:-2px;bottom:-2px;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#111827;border:4px solid #080b14;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:2;}
+.profile-photo-camera span{font-size:19px;line-height:1;}
+.profile-photo-camera input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;}
+.upload-label{display:none!important;}
