@@ -301,8 +301,29 @@ function App() {
     } catch (e:any) { setNotice(e?.message || 'Could not save your interest. Please try again.'); }
   };
   const connectToAdmin = async (p: Profile) => {
-    try { await api.post('/api/connection-requests', { profileId: p.id, profileName: p.name }); setNotice('Connection request sent to the official NaijaConnect admin.'); }
-    catch (e:any) { setNotice(e?.message || 'Could not send the connection request.'); }
+    try {
+      await api.post('/api/connection-requests', { profileId: p.id, profileName: p.name });
+      const subject = 'NaijaConnect Introduction Request';
+      const memberName = profile?.name || user?.name || user?.email?.split('@')[0] || 'NaijaConnect member';
+      const body = [
+        'Hello NaijaConnect Admin,',
+        '',
+        'I would like to request an introduction to this NaijaConnect member:',
+        '',
+        'Member profile: ' + p.name,
+        'Member location: ' + p.city + ', ' + p.country,
+        'My name: ' + memberName,
+        'My account email: ' + (user?.email || ''),
+        '',
+        'Please help with the introduction through NaijaConnect.',
+        '',
+        'Thank you.'
+      ].join('\\n');
+      setNotice('Introduction request prepared. Opening your email app…');
+      window.location.href = 'mailto:' + ADMIN_EMAIL + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    } catch (e:any) {
+      setNotice(e?.message || 'Could not send the connection request.');
+    }
   };
   const createPost = async (text:string, photosData:string[], photoTypes:string[]) => {
     try { const r = await api.post('/api/posts', {text, photosData, photoContentTypes:photoTypes}); setPosts(old => [r.data.post, ...old]); setNotice('Post published.'); }
@@ -557,7 +578,7 @@ function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Pro
       <div className="detail-section"><h3>About</h3><p>{p.city}, {p.country}</p></div>
       {p.interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div>}
       <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div>
-      {!own&&<div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
+      {!own&&<div className="detail-actions"><div className="connect-email-action"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><small>Introduction request via email: {ADMIN_EMAIL}</small></div><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
       
       {own&&<button className="primary" onClick={()=>go('/profile')}>Edit my profile</button>}
     </div>
