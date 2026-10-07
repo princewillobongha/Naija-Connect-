@@ -305,7 +305,7 @@ function App() {
         {user && path === '/' && <Home user={user} signIn={signIn} />}
         {path === '/' && !user && <Home user={user} signIn={signIn} />}
         {path === '/login' && <Login signIn={signIn} />}
-        {user && path === '/discover' && <Discover profiles={profiles} onLike={like} />}
+        {user && path === '/discover' && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
         {user && (path === '/posts' || path === '/community') && <Posts posts={posts} onCreatePost={createPost} onLikePost={async(id)=>{try{const r=await api.post('/api/post-likes',{postId:id});setPosts(old=>old.map(p=>p.id===id?{...p,likes:r.data.likes,likedByMe:r.data.liked}:p));}catch{setNotice('Could not update the reaction.');}}} onComment={async(id,text)=>{try{const r=await api.post('/api/post-comments',{postId:id,text});setPosts(old=>old.map(p=>p.id===id?{...p,comments:[...(p.comments||[]),r.data.comment]}:p));}catch{setNotice('Could not add your comment.');}}} />}
         {path.startsWith('/profile/') && (
           <ProfilePage
