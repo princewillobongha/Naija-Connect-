@@ -14,16 +14,18 @@ function mapProfile(p:any) {
   if (!p) return null;
   return { id:p.id, userId:p.id, name:p.name, age:p.age, gender:p.gender, city:p.city, country:p.country, bio:p.bio||'', interests:p.interests||[], lookingFor:p.looking_for||'Dating / connection', photo:p.photo||undefined, online:p.online||false, verified:p.verified||false, latitude:p.latitude, longitude:p.longitude };
 }
-function dataUrlToBlob(data:string, contentType:string) {
-  const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+async function dataUrlToBlob(data:string, contentType:string) {
+  const raw = data.includes(',') ? data.split(',')[1] : data;
+  const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
   return new Blob([bytes], { type: contentType || 'image/jpeg' });
 }
 async function uploadMedia(userId:string, data:string, contentType:string, folder:string) {
   if (!data) return '';
   const ext = (contentType || 'image/jpeg').split('/')[1] || 'jpeg';
   const path = folder + '/' + userId + '-' + crypto.randomUUID() + '.' + ext;
-  const { error } = await supabase.storage.from('media').upload(path, dataUrlToBlob(data, contentType), { contentType, upsert:false });
-  if (error) throw error;
+  const blob = await dataUrlToBlob(data, contentType);
+  const { error } = await supabase.storage.from('media').upload(path, blob, { contentType: contentType || blob.type || 'image/jpeg', upsert:false });
+  if (error) throw new Error('Media upload failed: ' + error.message);
   const { data: pub } = supabase.storage.from('media').getPublicUrl(path);
   return pub.publicUrl;
 }
@@ -35,7 +37,31 @@ async function getProfiles() {
 async function getPosts() {
   const { data, error } = await supabase.from('posts').select('*, profiles:author_id(*)').order('created_at',{ascending:false});
   if (error) throw error;
-  return (data||[]).map((p:any)=>({id:p.id,userId:p.author_id,text:p.text||'',photo:p.photo||undefined,createdAt:new Date(p.created_at).getTime(),author:mapProfile(p.profiles)}));
+  const rows = data || [];
+  const ids = rows.map((p:any)=>p.id);
+  let likes:any[] = [], comments:any[] = [];
+  if (ids.length) {
+    const [lr, cr] = await Promise.all([
+      supabase.from('post_likes').select('post_id,user_id').in('post_id', ids),
+      supabase.from('post_comments').select('id,post_id,author_id,text,created_at,profiles:author_id(*)').in('post_id', ids).order('created_at',{ascending:true})
+    ]);
+    if (lr.error) throw lr.error;
+    if (cr.error) throw cr.error;
+    likes = lr.data || [];
+    comments = cr.data || [];
+  }
+  const me = await currentUser();
+  return rows.map((p:any)=>{
+    const pl = likes.filter(x=>x.post_id===p.id);
+    const pc = comments.filter(x=>x.post_id===p.id);
+    return {
+      id:p.id,userId:p.author_id,text:p.text||'',photo:p.photo||undefined,
+      photos:Array.isArray(p.photos)&&p.photos.length?p.photos:(p.photo?[p.photo]:[]),
+      createdAt:new Date(p.created_at).getTime(),author:mapProfile(p.profiles),
+      likes:pl.length, likedByMe:!!me && pl.some(x=>x.user_id===me.id),
+      comments:pc.map((x:any)=>({id:x.id,postId:x.post_id,authorId:x.author_id,text:x.text,createdAt:new Date(x.created_at).getTime(),author:mapProfile(x.profiles)}))
+    };
+  });
 }
 export const auth = {
   async getUser(){ return currentUser(); },
@@ -91,9 +117,31 @@ export const api = {
       return {data:{profile:mapProfile(data)}};
     }
     if(path==='/api/posts'){
-      const photo=body.photoData ? await uploadMedia(u.id,body.photoData,body.photoContentType,'posts') : undefined;
-      const {data,error}=await supabase.from('posts').insert({author_id:u.id,text:body.text||'',photo}).select('*, profiles:author_id(*)').single(); if(error) throw error;
-      return {data:{post:{id:data.id,userId:data.author_id,text:data.text,photo:data.photo,createdAt:new Date(data.created_at).getTime(),author:mapProfile(data.profiles)}}};
+      const inputs = Array.isArray(body.photosData) ? body.photosData : (body.photoData ? [body.photoData] : []);
+      const types = Array.isArray(body.photoContentTypes) ? body.photoContentTypes : [];
+      const photos:string[] = [];
+      for(let i=0;i<inputs.length;i++){
+        if(inputs[i]) photos.push(await uploadMedia(u.id, inputs[i], types[i] || body.photoContentType || 'image/jpeg','posts'));
+      }
+      const {data,error}=await supabase.from('posts').insert({author_id:u.id,text:body.text||'',photo:photos[0]||null,photos}).select('*, profiles:author_id(*)').single();
+      if(error) throw error;
+      return {data:{post:{id:data.id,userId:data.author_id,text:data.text,photo:data.photo||undefined,photos,createdAt:new Date(data.created_at).getTime(),author:mapProfile(data.profiles),likes:0,likedByMe:false,comments:[]}}};
+    }
+    if(path==='/api/post-likes'){
+      const {data:existing}=await supabase.from('post_likes').select('post_id').eq('post_id',body.postId).eq('user_id',u.id).maybeSingle();
+      if(existing) {
+        const {error}=await supabase.from('post_likes').delete().eq('post_id',body.postId).eq('user_id',u.id); if(error) throw error;
+      } else {
+        const {error}=await supabase.from('post_likes').insert({post_id:body.postId,user_id:u.id}); if(error) throw error;
+      }
+      const {count,error}=await supabase.from('post_likes').select('*',{count:'exact',head:true}).eq('post_id',body.postId); if(error) throw error;
+      return {data:{liked:!existing,likes:count||0}};
+    }
+    if(path==='/api/post-comments'){
+      const text=String(body.text||'').trim(); if(!text) throw new Error('Comment cannot be empty.');
+      const {data,error}=await supabase.from('post_comments').insert({post_id:body.postId,author_id:u.id,text}).select('id,post_id,author_id,text,created_at,profiles:author_id(*)').single();
+      if(error) throw error;
+      return {data:{comment:{id:data.id,postId:data.post_id,authorId:data.author_id,text:data.text,createdAt:new Date(data.created_at).getTime(),author:mapProfile(data.profiles)}}};
     }
     if(path==='/api/likes'){
       const {data:existing}=await supabase.from('likes').select('*').eq('user_id',u.id).eq('profile_id',body.profileId).maybeSingle();
