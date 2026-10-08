@@ -254,7 +254,7 @@ function App() {
 
   useEffect(() => {
     if (!user) return;
-    const timer = window.setInterval(() => { refresh(false); }, 8000);
+    const timer = window.setInterval(() => { refresh(false); }, 30000);
     return () => window.clearInterval(timer);
   }, [user?.userId]);
 
