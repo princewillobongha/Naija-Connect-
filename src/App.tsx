@@ -70,7 +70,6 @@ const demoProfiles: Profile[] = [
     bio: 'Good energy, great conversations and a love for discovering new places.',
     interests: ['Music', 'Travel', 'Food'],
     lookingFor: 'Meaningful connection',
-    verified: true,
     online: true,
   },
   {
@@ -84,7 +83,6 @@ const demoProfiles: Profile[] = [
     bio: 'Easygoing, ambitious and always ready for a good laugh.',
     interests: ['Fitness', 'Business', 'Movies'],
     lookingFor: 'Dating',
-    verified: true,
     online: true,
   },
   {
@@ -111,7 +109,6 @@ const demoProfiles: Profile[] = [
     bio: 'Calabar based. Calm personality, travel lover and tech enthusiast.',
     interests: ['Tech', 'Travel', 'Football'],
     lookingFor: 'Serious relationship',
-    verified: true,
     online: true,
   },
   {
@@ -125,7 +122,6 @@ const demoProfiles: Profile[] = [
     bio: 'Positive mindset, books, family and meaningful friendships.',
     interests: ['Books', 'Culture', 'Fitness'],
     lookingFor: 'Meaningful connection',
-    verified: true,
     online: true,
   },
   {
@@ -609,8 +605,8 @@ function Discover({profiles,onLike,interested}:{profiles:Profile[],onLike:(id:st
 
 function ProfileCard({p,onLike,interested}:{p:Profile,onLike:(id:string)=>void,interested?:boolean}){
   return <article className="profile-card">
-    <button className="profile-photo" onClick={()=>go('/profile/'+p.id)}>{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i>{p.verified&&<b className="verified-float">✓</b>}</button>
-    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.verified&&<ShieldCheck size={15}/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?p.distanceKm.toFixed(1)+' km away':p.city+', '+p.country}</span><div className="activity-line">{p.online?<span className="online-text">● Online now</span>:<span>Recently active</span>}</div><p>{p.bio||'New to NaijaConnect — say hello.'}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className={interested?'like-btn active':'like-btn'} onClick={()=>onLike(p.id)}><Heart size={17} fill={interested?'currentColor':'none'}/> Interested</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
+    <button className="profile-photo" onClick={()=>go('/profile/'+p.id)}>{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i>{p.verified&&<VerifiedBadge/>}</button>
+    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.verified&&<VerifiedBadge/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?p.distanceKm.toFixed(1)+' km away':p.city+', '+p.country}</span><div className="activity-line">{p.online?<span className="online-text">● Online now</span>:<span>Recently active</span>}</div><p>{p.bio||'New to NaijaConnect — say hello.'}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className={interested?'like-btn active':'like-btn'} onClick={()=>onLike(p.id)}><Heart size={17} fill={interested?'currentColor':'none'}/> Interested</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
   </article>
 }
 
@@ -630,7 +626,7 @@ function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Pro
       {photos.length>1&&<div className="photo-thumbs">{photos.map((src,i)=><button key={src+i} className={i===slide?'photo-thumb active':'photo-thumb'} onClick={()=>setSlide(i)}><img src={src} alt="" /></button>)}</div>}
     </div>
     <div className="detail-copy">
-      <div className="detail-topline"><div><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'} {p.verified&&' • VERIFIED'}</div><h1>{p.name}</h1><div className="detail-age">{p.age} years old</div></div><div className="profile-more-wrap"><button className="icon-square" onClick={()=>setMenu(v=>!v)} aria-label="More profile options"><MoreHorizontal/></button>{menu&&<div className="profile-more-menu"><button onClick={share}>Share profile</button>{!own&&<><button onClick={report}>Report profile</button><button onClick={block}>Block profile</button></>}</div>}</div></div>
+      <div className="detail-topline"><div><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'}</div><h1>{p.name}</h1><div className="detail-age">{p.age} years old {p.verified&&<VerifiedBadge label/>}</div></div><div className="profile-more-wrap"><button className="icon-square" onClick={()=>setMenu(v=>!v)} aria-label="More profile options"><MoreHorizontal/></button>{menu&&<div className="profile-more-menu"><button onClick={share}>Share profile</button>{!own&&<><button onClick={report}>Report profile</button><button onClick={block}>Block profile</button></>}</div>}</div></div>
       <div className="detail-location"><MapPin size={18}/>{p.city}, {p.country}</div>
       <div className="profile-status-card"><span className={p.online?'status-dot online':'status-dot'}></span><div><strong>{p.online?'Online now':'Recently active'}</strong><small>Available to connect through NaijaConnect</small></div></div>
       <p className="big-bio">{p.bio||'This member has not added a bio yet.'}</p>
@@ -862,57 +858,95 @@ async function compressProfileImage(file: File): Promise<{data:string;type:strin
   let source: Blob = file;
   const lower = file.name.toLowerCase();
   const heicLike = /\.(heic|heif)$/i.test(lower) || /image\/(heic|heif)/i.test(file.type);
+
   if (heicLike) {
-    const mod:any = await import('heic2any');
-    const converted:any = await mod.default({blob:file,toType:'image/jpeg',quality:0.82});
-    source = Array.isArray(converted) ? converted[0] : converted;
-  }
-  let bitmap: ImageBitmap | null = null;
-  try {
-    bitmap = await createImageBitmap(source);
-  } catch {
-    const url = URL.createObjectURL(source);
     try {
-      const image = await new Promise<HTMLImageElement>((resolve,reject)=>{
-        const img = new Image();
-        img.onload=()=>resolve(img);
-        img.onerror=()=>reject(new Error('Image decode failed.'));
-        img.src=url;
-      });
-      const maxSide=1600;
-      const scale=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight));
-      const canvas=document.createElement('canvas');
-      canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
-      canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
-      const ctx=canvas.getContext('2d');
-      if(!ctx) throw new Error('Could not prepare the selected photo.');
-      ctx.drawImage(image,0,0,canvas.width,canvas.height);
-      return {data:canvas.toDataURL('image/jpeg',0.82),type:'image/jpeg'};
-    } finally { URL.revokeObjectURL(url); }
+      const mod:any = await import('heic2any');
+      const converted:any = await mod.default({ blob: file, toType: 'image/jpeg', quality: 0.86 });
+      source = Array.isArray(converted) ? converted[0] : converted;
+    } catch {
+      // Some phones report HEIC/HEIF inconsistently. The browser fallback below
+      // will still get a chance to decode the selected file.
+      source = file;
+    }
   }
-  const maxSide=1600;
-  const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
-  const canvas=document.createElement('canvas');
-  canvas.width=Math.max(1,Math.round(bitmap.width*scale));
-  canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-  const ctx=canvas.getContext('2d');
-  if(!ctx) throw new Error('Could not prepare the selected photo.');
-  ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
-  bitmap.close();
-  return {data:canvas.toDataURL('image/jpeg',0.82),type:'image/jpeg'};
+
+  const maxSide = 1800;
+
+  // First try the browser's native bitmap decoder.
+  try {
+    const bitmap = await createImageBitmap(source);
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas unavailable.');
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return { data: canvas.toDataURL('image/jpeg', 0.86), type: 'image/jpeg' };
+  } catch {}
+
+  // Fallback for Android/browser combinations where createImageBitmap rejects
+  // an otherwise valid photo.
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read the selected photo.'));
+    reader.readAsDataURL(source);
+  });
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Image decoder could not open this photo.'));
+    img.src = dataUrl;
+  });
+
+  const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas unavailable.');
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return { data: canvas.toDataURL('image/jpeg', 0.86), type: 'image/jpeg' };
+}
+
+function VerifiedBadge({label=false}:{label?:boolean}) {
+  return <span className={label ? 'verified-badge verified-badge-label' : 'verified-badge'} aria-label="Verified member" title="Verified by NaijaConnect admin"><Check size={12} strokeWidth={3}/>{label&&<span>Verified</span>}</span>;
 }
 
 function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved:()=>void}){
   const [name,setName]=useState(profile?.name||user?.name||''); const [phone,setPhone]=useState(''); const [age,setAge]=useState(String(profile?.age||25)); const [gender,setGender]=useState(profile?.gender||''); const [city,setCity]=useState(profile?.city||''); const [bio,setBio]=useState(profile?.bio||''); const [lookingFor,setLookingFor]=useState(profile?.lookingFor||'Dating / connection'); const [interests,setInterests]=useState(profile?.interests.join(', ')||''); const [photo,setPhoto]=useState(profile?.photo||''); const [photos,setPhotos]=useState<string[]>(profile?.photos?.length?profile.photos:(profile?.photo?[profile.photo]:[])); const [saving,setSaving]=useState(false); const [saved,setSaved]=useState(false);
   useEffect(()=>{(async()=>{try{const r=await api.get('/api/my-contact');setPhone(r.data.phone||'');}catch{}})();},[user?.userId]);
   if(!user)return <Empty title="Create your profile" text="Sign in to create a profile that other members can discover." action={()=>go('/login')} actionText="Sign in"/>;
-  const pickPhoto=async(file?:File)=>{
-    if(!file)return;
-    const supported=/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
-    if(!supported){alert('Please choose a JPEG, PNG, WebP or HEIC/HEIF photo.');return;}
-    if(file.size>25*1024*1024){alert('Please choose an image under 25 MB.');return;}
-    try{const prepared=await compressProfileImage(file);setPhotos(old=>[...old.filter(x=>x!==prepared.data),prepared.data].slice(-6));setPhoto(prepared.data);setSaved(false);}
-    catch{alert('We could not read that photo. Please choose a clear JPEG, PNG, WebP or HEIC/HEIF photo and try again.');}
+  const pickPhotos=async(files:FileList|null)=>{
+    if(!files?.length)return;
+    const selected=Array.from(files).slice(0, Math.max(0, 6-photos.length));
+    if(!selected.length){setSaved(false);return;}
+    const prepared:string[]=[];
+    const failures:string[]=[];
+    for(const file of selected){
+      const lower=file.name.toLowerCase();
+      const looksLikeImage=file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif)$/i.test(lower);
+      if(!looksLikeImage){failures.push(file.name);continue;}
+      if(file.size>25*1024*1024){failures.push(file.name);continue;}
+      try{
+        const result=await compressProfileImage(file);
+        prepared.push(result.data);
+      }catch{
+        failures.push(file.name);
+      }
+    }
+    if(prepared.length){
+      setPhotos(old=>[...old,...prepared].slice(0,6));
+      setPhoto(prepared[prepared.length-1]);
+      setSaved(false);
+    }
+    if(failures.length && !prepared.length){
+      alert('That photo format could not be opened on this device. Please choose another photo from your gallery.');
+    }
   };
   const removePhoto=(index:number)=>{setPhotos(old=>{const next=old.filter((_,i)=>i!==index);setPhoto(next[0]||'');return next;});setSaved(false);};
   const save=async()=>{
@@ -924,9 +958,9 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
     }catch(e:any){alert('Could not save your profile. '+String(e?.message||'Please try again.'));}finally{setSaving(false);}
   };
   return <section className="form-page"><div className="page-heading"><div><span className="eyebrow">MY PROFILE</span><h1>Put yourself out there</h1><p>Build a complete profile so people can discover you by city, interests and dating intentions.</p></div></div><div className="form-card">
-    <div className="profile-photo-editor"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="profile-photo-camera" aria-label="Add profile photo" title="Add profile photo"><span>📷</span><input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={e=>pickPhoto(e.target.files?.[0])}/></label></div>
-    <div className="photo-manager">{photos.map((src,i)=><div className="managed-photo" key={src+i}><img src={src} alt={'Profile photo '+(i+1)}/><button type="button" onClick={()=>removePhoto(i)} aria-label="Remove photo">×</button></div>)}{photos.length<6&&<label className="add-photo-tile"><span>+</span><small>Add photo</small><input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={e=>pickPhoto(e.target.files?.[0])}/></label>}</div>
-    <small className="photo-limit">Add up to 6 photos. Your first photo is your main profile picture.</small>
+    <div className="profile-photo-editor"><div className="profile-form-avatar">{photo?<img src={photo} alt="Profile preview"/>:initials(name||'You')}</div><label className="profile-photo-camera" aria-label="Add profile photos" title="Add photos"><span>📷</span><input type="file" accept="image/*,.heic,.heif" multiple onChange={e=>{pickPhotos(e.target.files);e.currentTarget.value='';}}/></label></div>
+    <div className="photo-manager">{photos.map((src,i)=><div className="managed-photo" key={src+i}><img src={src} alt={'Profile photo '+(i+1)}/><button type="button" onClick={()=>removePhoto(i)} aria-label="Remove photo">×</button></div>)}</div>
+    <small className="photo-limit">Tap the camera to add up to 6 photos at once. Your first photo is your main profile picture.</small>
     <label>Display name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name"/></label><div className="two-col"><label>Age<input type="number" min="18" value={age} onChange={e=>setAge(e.target.value)}/></label><label>Gender<select value={gender} onChange={e=>setGender(e.target.value)}><option value="">Select</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label></div>
     <label>City<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Lagos, Abuja, Calabar…"/></label><div className="profile-note"><MapPin/><span><strong>City-based discovery</strong><small>Your city appears on your profile and in city search.</small></span></div>
     <label>Phone number<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Your phone number"/><small className="private-note">Only the official NaijaConnect admin can see your phone number.</small></label>
