@@ -732,6 +732,7 @@ function ProfilePage({id,profiles,user,ownProfile,onLike,onConnect}:{id:string,p
   const [menu,setMenu]=useState(false);
   const [slide,setSlide]=useState(0);
   const photos=(p?.photos&&p.photos.length?p.photos:(p?.photo?[p.photo]:[]));
+  const interests=Array.isArray(p?.interests)?p.interests:[];
   if(!p)return <Empty title="Profile not found" text="We couldn't load this profile yet. Please try again." action={()=>window.dispatchEvent(new Event('naijaconnect-profile-updated'))} actionText="Try again"/>;
   const share=async()=>{try{if(navigator.share) await navigator.share({title:'NaijaConnect profile',text:'Check out '+p.name+' on NaijaConnect.',url:window.location.href});else await navigator.clipboard.writeText(window.location.href);setMenu(false);}catch{}};
   const report=async()=>{const reason=window.prompt('Why are you reporting this profile?','Suspicious or fake profile');if(!reason)return;try{await api.post('/api/reports',{profileId:p.id,reason});setMenu(false);alert('Report submitted. Thank you for helping keep NaijaConnect safe.');}catch(e:any){alert(e?.message||'Could not submit the report.');}};
@@ -747,8 +748,8 @@ function ProfilePage({id,profiles,user,ownProfile,onLike,onConnect}:{id:string,p
       <div className="profile-status-card"><span className={p.online?'status-dot online':'status-dot'}></span><div><strong>{p.online?'Online now':'Recently active'}</strong><small>Available to connect through NaijaConnect</small></div></div>
       <p className="big-bio">{p.bio||'This member has not added a bio yet.'}</p>
       <div className="detail-section"><h3>About</h3><p>{p.city}, {p.country}</p></div>
-      {p.interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div>}
-      <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div>
+      {interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{interests.map(x=><span key={x}>{x}</span>)}</div></div>}
+      <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor||'Connection'}</p></div>
       {!own&&<div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
       {own&&<button className="primary" onClick={()=>go('/profile')}>Edit my profile</button>}
     </div>
