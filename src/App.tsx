@@ -38,6 +38,7 @@ type Profile = {
   online?: boolean;
   lastActiveAt?: string;
   verified?: boolean;
+  adminBadge?: boolean;
   latitude?: number;
   longitude?: number;
   distanceKm?: number;
@@ -605,8 +606,8 @@ function Discover({profiles,onLike,interested}:{profiles:Profile[],onLike:(id:st
 
 function ProfileCard({p,onLike,interested}:{p:Profile,onLike:(id:string)=>void,interested?:boolean}){
   return <article className="profile-card">
-    <button className="profile-photo" onClick={()=>go('/profile/'+p.id)}>{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i>{p.verified&&<VerifiedBadge/>}</button>
-    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.verified&&<VerifiedBadge/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?p.distanceKm.toFixed(1)+' km away':p.city+', '+p.country}</span><div className="activity-line">{p.online?<span className="online-text">● Online now</span>:<span>Recently active</span>}</div><p>{p.bio||'New to NaijaConnect — say hello.'}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className={interested?'like-btn active':'like-btn'} onClick={()=>onLike(p.id)}><Heart size={17} fill={interested?'currentColor':'none'}/> Interested</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
+    <button className="profile-photo" onClick={()=>go('/profile/'+p.id)}>{p.photo?<img src={p.photo} alt={p.name}/>:<span style={{background:avatarColor(p.name)}}>{initials(p.name)}</span>}<i className={p.online?'online':''}></i>{p.adminBadge?<AdminBadge/>:p.verified&&<VerifiedBadge/>}</button>
+    <div className="profile-card-body"><button className="profile-name" onClick={()=>go('/profile/'+p.id)}>{p.name}, {p.age} {p.adminBadge?<AdminBadge/>:p.verified&&<VerifiedBadge/>}</button><span className="location"><MapPin size={14}/>{p.distanceKm!==undefined?p.distanceKm.toFixed(1)+' km away':p.city+', '+p.country}</span><div className="activity-line">{p.online?<span className="online-text">● Online now</span>:<span>Recently active</span>}</div><p>{p.bio||'New to NaijaConnect — say hello.'}</p><div className="tags">{p.interests.slice(0,3).map(x=><span key={x}>{x}</span>)}</div><div className="card-actions"><button className={interested?'like-btn active':'like-btn'} onClick={()=>onLike(p.id)}><Heart size={17} fill={interested?'currentColor':'none'}/> Interested</button><button className="more-btn" onClick={()=>go('/profile/'+p.id)}>View profile <ChevronRight size={16}/></button></div></div>
   </article>
 }
 
@@ -626,7 +627,7 @@ function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Pro
       {photos.length>1&&<div className="photo-thumbs">{photos.map((src,i)=><button key={src+i} className={i===slide?'photo-thumb active':'photo-thumb'} onClick={()=>setSlide(i)}><img src={src} alt="" /></button>)}</div>}
     </div>
     <div className="detail-copy">
-      <div className="detail-topline"><div><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'}</div><h1>{p.name}</h1><div className="detail-age">{p.age} years old {p.verified&&<VerifiedBadge label/>}</div></div><div className="profile-more-wrap"><button className="icon-square" onClick={()=>setMenu(v=>!v)} aria-label="More profile options"><MoreHorizontal/></button>{menu&&<div className="profile-more-menu"><button onClick={share}>Share profile</button>{!own&&<><button onClick={report}>Report profile</button><button onClick={block}>Block profile</button></>}</div>}</div></div>
+      <div className="detail-topline"><div><div className="eyebrow">{p.online?'ONLINE NOW':'PROFILE'}</div><h1>{p.name}</h1><div className="detail-age">{p.age} years old {p.adminBadge?<AdminBadge label/>:p.verified&&<VerifiedBadge label/>}</div></div><div className="profile-more-wrap"><button className="icon-square" onClick={()=>setMenu(v=>!v)} aria-label="More profile options"><MoreHorizontal/></button>{menu&&<div className="profile-more-menu"><button onClick={share}>Share profile</button>{!own&&<><button onClick={report}>Report profile</button><button onClick={block}>Block profile</button></>}</div>}</div></div>
       <div className="detail-location"><MapPin size={18}/>{p.city}, {p.country}</div>
       <div className="profile-status-card"><span className={p.online?'status-dot online':'status-dot'}></span><div><strong>{p.online?'Online now':'Recently active'}</strong><small>Available to connect through NaijaConnect</small></div></div>
       <p className="big-bio">{p.bio||'This member has not added a bio yet.'}</p>
@@ -916,6 +917,9 @@ async function compressProfileImage(file: File): Promise<{data:string;type:strin
 function VerifiedBadge({label=false}:{label?:boolean}) {
   return <span className={label ? 'verified-badge verified-badge-label' : 'verified-badge'} aria-label="Verified member" title="Verified by NaijaConnect admin"><Check size={12} strokeWidth={3}/>{label&&<span>Verified</span>}</span>;
 }
+function AdminBadge({label=false}:{label?:boolean}) {
+  return <span className={label ? 'admin-profile-badge admin-profile-badge-label' : 'admin-profile-badge'} aria-label="NaijaConnect admin badge" title="NaijaConnect admin badge"><ShieldCheck size={12} strokeWidth={3}/>{label&&<span>NaijaConnect badge</span>}</span>;
+}
 
 function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved:()=>void}){
   const [name,setName]=useState(profile?.name||user?.name||''); const [phone,setPhone]=useState(''); const [age,setAge]=useState(String(profile?.age||25)); const [gender,setGender]=useState(profile?.gender||''); const [city,setCity]=useState(profile?.city||''); const [bio,setBio]=useState(profile?.bio||''); const [lookingFor,setLookingFor]=useState(profile?.lookingFor||'Dating / connection'); const [interests,setInterests]=useState(profile?.interests.join(', ')||''); const [photo,setPhoto]=useState(profile?.photo||''); const [photos,setPhotos]=useState<string[]>(profile?.photos?.length?profile.photos:(profile?.photo?[profile.photo]:[])); const [saving,setSaving]=useState(false); const [saved,setSaved]=useState(false);
@@ -1095,14 +1099,17 @@ function AdminPage(){
   const [text,setText]=useState('');
   const [status,setStatus]=useState('');
   const [tab,setTab]=useState<'members'|'reports'>('members');
+  const [search,setSearch]=useState('');
   const loadUsers=async()=>{try{const r=await api.get('/api/admin/users');setUsers(r.data.users||[]);setStatus('');}catch(e:any){setStatus(e?.message||'Admin member directory could not be loaded.');}};
   const loadReports=async()=>{try{const r=await api.get('/api/admin/reports');setReports(r.data.reports||[]);}catch(e:any){setStatus(e?.message||'Reports could not be loaded.');}};
   const loadThread=async(userId:string)=>{try{const r=await api.get('/api/admin/messages?userId='+encodeURIComponent(userId));setMessages(r.data.messages||[]);}catch{setMessages([]);}};
   useEffect(()=>{loadUsers();loadReports();},[]);
   const select=async(u:any)=>{setSelected(u);setStatus('');await loadThread(u.id);};
+  const visibleUsers=users.filter(u=>{const q=search.trim().toLowerCase();return !q || String(u.name||'').toLowerCase().includes(q) || String(u.city||'').toLowerCase().includes(q) || String(u.phone||'').toLowerCase().includes(q);});
   const send=async()=>{const clean=text.trim();if(!selected||!clean)return;try{await api.post('/api/admin/messages',{userId:selected.id,text:clean});setText('');setStatus('Message sent.');await loadThread(selected.id);}catch(e:any){setStatus(e?.message||'Could not send the admin message.');}};
   const deleteUser=async(u:any)=>{if(!window.confirm('Delete '+(u.name||'this member')+' permanently? This cannot be undone.'))return;try{await api.post('/api/admin/delete-user',{userId:u.id});setUsers(old=>old.filter(x=>x.id!==u.id));if(selected?.id===u.id){setSelected(null);setMessages([]);}setStatus('Member account deleted.');}catch(e:any){setStatus(e?.message||'Could not delete this member.');}};
-  const toggleVerified=async(u:any)=>{try{const r=await api.post('/api/admin/verify-user',{userId:u.id,verified:!u.verified});setUsers(old=>old.map(x=>x.id===u.id?{...x,verified:r.data.profile.verified}:x));setStatus(r.data.profile.verified?'Profile verified.':'Verification removed.');}catch(e:any){setStatus(e?.message||'Could not update verification.');}};
+  const toggleVerified=async(u:any)=>{try{const r=await api.post('/api/admin/verify-user',{userId:u.id,verified:!u.verified});setUsers(old=>old.map(x=>x.id===u.id?{...x,verified:r.data.profile.verified}:x));setSelected((x:any)=>x?.id===u.id?{...x,verified:r.data.profile.verified}:x);setStatus(r.data.profile.verified?'Profile verified.':'Verification removed.');}catch(e:any){setStatus(e?.message||'Could not update verification.');}};
+  const toggleAdminBadge=async(u:any)=>{try{const r=await api.post('/api/admin/badge',{userId:u.id,adminBadge:!u.adminBadge});setUsers(old=>old.map(x=>x.id===u.id?{...x,adminBadge:r.data.profile.adminBadge}:x));setSelected((x:any)=>x?.id===u.id?{...x,adminBadge:r.data.profile.adminBadge}:x);setStatus(r.data.profile.adminBadge?'Orange admin badge assigned.':'Orange admin badge removed.');}catch(e:any){setStatus(e?.message||'Could not update the admin badge.');}};
   return <section className="content-page">
     <div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>NaijaConnect Admin</h1><p>Manage members, messages, safety reports and moderation.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div>
     <div className="admin-tabs">
@@ -1111,8 +1118,9 @@ function AdminPage(){
     </div>
     {tab==='members' && <div className="admin-layout">
       <div className="admin-requests">
-        {users.map(u=><div className="admin-member-row" key={u.id}><button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button><button className={u.verified?'admin-verify-member active':'admin-verify-member'} onClick={()=>toggleVerified(u)}>{u.verified?'✓ Verified':'Verify'}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)}>Delete</button></div>)}
-        {!users.length&&<div className="empty-mini">{status||'No member profiles yet.'}</div>}
+        <div className="admin-member-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search any member by name or city"/></div>
+        {visibleUsers.map(u=><div className="admin-member-row" key={u.id}><button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button><div className="admin-member-actions"><button className={u.verified?'admin-verify-member active':'admin-verify-member'} onClick={()=>toggleVerified(u)}>{u.verified?'✓ Verified':'Verify'}</button><button className={u.adminBadge?'admin-badge-member active':'admin-badge-member'} onClick={()=>toggleAdminBadge(u)}>{u.adminBadge?'● Orange':'Orange'}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)}>Delete</button></div></div>)}
+        {!users.length&&<div className="empty-mini">{status||(users.length?'No members match your search.':'No member profiles yet.')}</div>}
       </div>
       <div className="admin-chat">
         {selected ? <><div className="admin-chat-head"><ShieldCheck/><span><strong>NaijaConnect Admin</strong><small>Official admin → {selected.name}</small></span></div><div className="admin-thread">{messages.map(m=><div key={m.id} className={m.senderType==='admin'?'admin-bubble mine':'admin-bubble'}><small>{m.senderType==='admin'?'ADMIN':selected.name}</small><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}{!messages.length&&<div className="empty-mini">No messages yet. Start the conversation.</div>}</div><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message to this member…"/><button className="primary" onClick={send}>Send as Admin</button></> : <div className="empty-mini">Select any member to message them.</div>}
@@ -1132,7 +1140,7 @@ function AdminMessages(){
   const send=async()=>{if(!text.trim()||busy||!hasAdminMessage)return;setBusy(true);try{await api.post('/api/admin/messages',{text:text.trim()});setText('');await load();}finally{setBusy(false);}};
   if(!hasAdminMessage) return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>There are no messages from the official admin yet.</p></div></div><div className="empty-mini">When the admin sends you a message, it will appear here and you will be able to reply.</div></section>;
   return <section className="content-page facebook-admin-chat">
-    <div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>Your private conversation with the official admin.</p></div></div>
+    <div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>Your private conversation with the official NaijaConnect admin. Members can only reply to the admin here.</p></div></div>
     <div className="facebook-admin-thread">
       {messages.map(m=><div className={m.senderType==='user'?'admin-chat-bubble mine':'admin-chat-bubble'} key={m.id}><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}
     </div>
