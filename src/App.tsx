@@ -407,7 +407,7 @@ function App() {
     {user && path === '/interested' && <InterestedPage profiles={profiles} interested={interestedIds} onLike={like} demoInterested={demoInterested} />}
     {user && (path === '/posts' || path === '/community') && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
 
-    {path.startsWith('/profile/') && <ProfilePage id={path.split('/')[2]} profiles={profiles} user={user} onLike={like} onConnect={connectToAdmin} />}
+    {user && path.startsWith('/profile/') && <ProfilePage id={path.split('/')[2]} profiles={profiles} user={user} onLike={like} onConnect={connectToAdmin} />}
     {path === '/admin' && isAdminUser(user) && <AdminPage />}
     {path === '/admin-messages' && user && <AdminMessages />}
     {user && path === '/profile' && <MyProfile user={user} profile={profile} onSaved={refresh} />}
