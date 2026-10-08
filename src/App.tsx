@@ -452,8 +452,10 @@ function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;sig
       } catch { if(alive) setUnreadCount(0); }
     };
     loadUnread();
-    const timer=window.setInterval(loadUnread,5000);
-    return ()=>{alive=false;window.clearInterval(timer);};
+    const onLiveMessage=()=>{ loadUnread(); };
+    window.addEventListener('naijaconnect-message', onLiveMessage);
+    const timer=window.setInterval(loadUnread,30000);
+    return ()=>{alive=false;window.clearInterval(timer);window.removeEventListener('naijaconnect-message', onLiveMessage);};
   },[user?.userId,admin]);
   useEffect(()=>{
     const title=unreadCount>0 ? '('+(unreadCount>99?'99+':unreadCount)+') NaijaConnect' : 'NaijaConnect';
