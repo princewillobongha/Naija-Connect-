@@ -207,13 +207,9 @@ function App() {
           const likesResponse = await api.get('/api/likes/me');
           setInterestedIds(new Set((likesResponse.data.likes || []).map((x:any)=>x.profile_id)));
         } catch { setInterestedIds(new Set()); }
-        try {
-          const postsResponse = await api.get('/api/posts');
-          setPosts(postsResponse.data.posts || []);
-        } catch (postError:any) {
-          setPosts([]);
-          setNotice(postError?.message || 'Community posts could not be loaded.');
-        }
+        // Community/posts routes are currently redirected to Discover, so don't
+        // fetch the full posts feed on every background refresh. Posts can still
+        // be created through the existing API without adding this recurring load.
       }
     } catch {
       setNotice('Some live data could not be loaded yet. Demo profiles remain available.');
