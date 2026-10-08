@@ -1143,3 +1143,120 @@ h1,h2,h3,h4,p,span,strong,small,button,label,div{overflow-wrap:anywhere}
   .admin-member-actions button{font-size:10px}
   .admin-bubble,.admin-chat-bubble{max-width:90%}
 }
+
+
+/* Final mobile polish: city chips, message notification, compact admin names, dark outgoing bubbles */
+.city-chips{
+  display:flex!important;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-width:0;
+  padding:4px 2px 12px;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  flex-wrap:nowrap!important;
+  white-space:nowrap;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+}
+.city-chip{
+  display:inline-flex!important;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  flex:0 0 auto!important;
+  width:auto!important;
+  min-width:max-content!important;
+  max-width:none!important;
+  height:42px;
+  padding:0 12px!important;
+  border-radius:999px!important;
+  white-space:nowrap!important;
+  overflow:visible!important;
+  line-height:1!important;
+}
+.city-chip span{
+  display:block;
+  max-width:140px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.city-chip small{
+  display:inline-flex!important;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  min-width:18px;
+  height:18px;
+  padding:0 5px;
+  border-radius:999px;
+  font-size:9px!important;
+  line-height:18px;
+}
+.admin-request-name{
+  font-size:13px!important;
+  line-height:1.25!important;
+  font-weight:750!important;
+}
+.admin-chat-head strong{
+  font-size:14px!important;
+  line-height:1.2!important;
+}
+.admin-bubble,
+.admin-chat-bubble{
+  background:#080b10!important;
+  color:#fff!important;
+}
+.admin-bubble.mine,
+.admin-chat-message.mine .admin-chat-bubble{
+  background:#000!important;
+  color:#fff!important;
+  border-color:rgba(255,255,255,.14)!important;
+}
+.admin-bubble p,
+.admin-chat-bubble p,
+.admin-chat-message .admin-chat-bubble p{
+  color:#fff!important;
+}
+.admin-bubble time,
+.admin-chat-bubble time,
+.admin-chat-message .admin-chat-bubble time{
+  color:#94a3b8!important;
+}
+.notification-btn{
+  position:relative;
+  width:38px;
+  height:38px;
+  display:inline-grid;
+  place-items:center;
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:11px;
+  background:rgba(255,255,255,.035);
+  color:#e5e7eb;
+  cursor:pointer;
+}
+.notification-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+.notification-count{
+  position:absolute;
+  right:-5px;
+  top:-6px;
+  min-width:18px;
+  height:18px;
+  padding:0 5px;
+  display:grid;
+  place-items:center;
+  border-radius:999px;
+  background:#ef4444;
+  color:#fff!important;
+  border:2px solid #080b14;
+  font-size:9px!important;
+  font-weight:900;
+  line-height:14px;
+}
+@media(max-width:560px){
+  .city-chip{height:40px;padding:0 11px!important}
+  .city-chip span{max-width:120px}
+  .notification-btn{width:36px;height:36px}
+}
