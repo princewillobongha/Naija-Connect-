@@ -15,7 +15,7 @@ function mapProfile(p:any) {
   if (!p) return null;
   const lastActive=p.last_active_at ? new Date(p.last_active_at).getTime() : 0;
   const online=lastActive ? Date.now()-lastActive < 15*60*1000 : !!p.online;
-  return { id:p.id, userId:p.id, name:String(p.name||'Member'), age:Number(p.age||18), gender:p.gender||'', city:String(p.city||'Nigeria'), country:String(p.country||'Nigeria'), bio:String(p.bio||''), interests:Array.isArray(p.interests)?p.interests.map((x:any)=>String(x)).filter(Boolean):[], lookingFor:String(p.looking_for||'Dating / connection'), photo:p.photo||undefined, photos:Array.isArray(p.photos)?p.photos.filter(Boolean):(p.photo?[p.photo]:[]), online, verified:!!p.verified, latitude:p.latitude, longitude:p.longitude, lastActiveAt:p.last_active_at||undefined };
+  return { id:p.id, userId:p.id, name:String(p.name||'Member'), age:Number(p.age||18), gender:p.gender||'', city:String(p.city||'Nigeria'), country:String(p.country||'Nigeria'), bio:String(p.bio||''), interests:Array.isArray(p.interests)?p.interests.map((x:any)=>String(x)).filter(Boolean):[], lookingFor:String(p.looking_for||'Dating / connection'), photo:p.photo||undefined, photos:Array.isArray(p.photos)?p.photos.filter(Boolean):(p.photo?[p.photo]:[]), online, verified:!!p.verified, adminBadge:!!p.admin_badge, latitude:p.latitude, longitude:p.longitude, lastActiveAt:p.last_active_at||undefined };
 }
 async function dataUrlToBlob(data:string, contentType:string) {
   const raw = data.includes(',') ? data.split(',')[1] : data;
@@ -124,9 +124,13 @@ export const api = {
     if (path === '/api/profiles') return {data:{profiles:await getProfiles()}};
     if (path === '/api/admin/reports') {
       if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
-      const {data,error}=await supabase.from('profile_reports').select('*, reporter:reporter_id(*), reported:reported_id(*)').order('created_at',{ascending:false});
+      const {data,error}=await supabase.from('profile_reports').select('*').order('created_at',{ascending:false});
       if(error) throw error;
-      return {data:{reports:(data||[]).map((r:any)=>({id:r.id,reason:r.reason,details:r.details,status:r.status,createdAt:new Date(r.created_at).getTime(),reporter:mapProfile(r.reporter),reported:mapProfile(r.reported)}))}};
+      const ids=Array.from(new Set((data||[]).flatMap((r:any)=>[r.reporter_id,r.reported_id]).filter(Boolean)));
+      const {data:profiles,error:profilesError}=ids.length ? await supabase.from('profiles').select('*').in('id',ids) : {data:[],error:null};
+      if(profilesError) throw profilesError;
+      const byId=new Map((profiles||[]).map((p:any)=>[p.id,mapProfile(p)]));
+      return {data:{reports:(data||[]).map((r:any)=>({id:r.id,reason:r.reason,details:r.details,status:r.status,createdAt:new Date(r.created_at).getTime(),reporter:byId.get(r.reporter_id)||null,reported:byId.get(r.reported_id)||null}))}};
     }
     if (path === '/api/admin/users') {
       if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
@@ -249,12 +253,19 @@ export const api = {
       const {data,error}=await supabase.from('connection_requests').insert({user_id:u.id,user_name:u.user_metadata?.full_name||u.email?.split('@')[0]||'Member',email:u.email||'',profile_id:body.profileId,profile_name:body.profileName}).select().single();if(error)throw error;return {data:{request:data}};
     }
     if(path==='/api/messages'){
-      const {data,error}=await supabase.from('messages').insert({sender_id:u.id,receiver_id:body.receiverId,text:body.text}).select().single();if(error)throw error;return {data:{message:{id:data.id,senderId:data.sender_id,receiverId:data.receiver_id,text:data.text,createdAt:new Date(data.created_at).getTime()}}};
+      throw new Error('Member-to-member messaging is disabled. Use the official NaijaConnect admin conversation.');
     }
     if(path==='/api/admin/verify-user'){
       if(!isAdminUser(u)) throw new Error('Unauthorized');
       if(!body.userId) throw new Error('User is required.');
       const {data,error}=await supabase.from('profiles').update({verified:!!body.verified}).eq('id',body.userId).select().single();
+      if(error) throw error;
+      return {data:{profile:mapProfile(data)}};
+    }
+    if(path==='/api/admin/badge'){
+      if(!isAdminUser(u)) throw new Error('Unauthorized');
+      if(!body.userId) throw new Error('User is required.');
+      const {data,error}=await supabase.from('profiles').update({admin_badge:!!body.adminBadge}).eq('id',body.userId).select().single();
       if(error) throw error;
       return {data:{profile:mapProfile(data)}};
     }
