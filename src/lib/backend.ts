@@ -33,9 +33,9 @@ async function uploadMedia(userId:string, data:string, contentType:string, folde
   const { data: pub } = supabase.storage.from('media').getPublicUrl(path);
   return pub.publicUrl;
 }
-async function getProfiles() {
+async function getProfiles(passive=false) {
   const me = await currentUser();
-  if (me) {
+  if (me && !passive) {
     await supabase.from('profiles').update({last_active_at:new Date().toISOString(),online:true}).eq('id',me.id);
   }
   const { data, error } = await supabase.from('profiles').select('*').order('created_at',{ascending:false});
@@ -121,7 +121,7 @@ export const api = {
       if(error) throw error;
       return {data:{profile:mapProfile(data)}};
     }
-    if (path === '/api/profiles') return {data:{profiles:await getProfiles()}};
+    if (path === '/api/profiles' || path === '/api/profiles?passive=1') return {data:{profiles:await getProfiles(path.endsWith('?passive=1'))}};
     if (path === '/api/admin/reports') {
       if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
       const {data,error}=await supabase.from('profile_reports').select('*').order('created_at',{ascending:false});
