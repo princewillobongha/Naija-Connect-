@@ -287,6 +287,19 @@ function App() {
     return () => { window.clearInterval(timer); supabase.removeChannel(channel); };
   }, [user?.userId]);
 
+  useEffect(() => {
+    if (!user) return;
+    const refreshProfileViews = async () => {
+      try {
+        const [people, me] = await Promise.all([api.get('/api/profiles?passive=1'), api.get('/api/me')]);
+        setProfiles(people.data.profiles || []);
+        setProfile(me.data.profile || null);
+      } catch {}
+    };
+    window.addEventListener('naijaconnect-profile-updated', refreshProfileViews);
+    return () => window.removeEventListener('naijaconnect-profile-updated', refreshProfileViews);
+  }, [user?.userId]);
+
   const signIn = async (email?: string, password?: string) => {
     try { await auth.signInWithPassword(String(email || ''), String(password || '')); setNotice('You are signed in successfully.'); return { ok: true, message: '' }; }
     catch (e: any) {
