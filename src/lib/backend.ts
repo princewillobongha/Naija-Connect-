@@ -180,8 +180,11 @@ export const api = {
     if (path.startsWith('/api/admin/messages')) {
       if (!u) throw new Error('Unauthorized');
       const isAdmin = isAdminUser(u);
+      const requestedUserId = isAdmin ? new URLSearchParams(path.includes('?') ? path.split('?')[1] : '').get('userId') : null;
       const query = supabase.from('admin_messages').select('*').order('created_at',{ascending:true});
-      const {data,error}=isAdmin ? await query : await query.eq('user_id',u.id);
+      const {data,error}=isAdmin
+        ? (requestedUserId ? await query.eq('user_id',requestedUserId) : await query)
+        : await query.eq('user_id',u.id);
       if(error) throw error;
       const ids=(data||[]).map((m:any)=>m.id);
       const {data:reactionRows,error:reactionError}=ids.length ? await supabase.from('admin_message_reactions').select('message_id,user_id,reaction').in('message_id',ids) : {data:[],error:null};
