@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const supabase = createClient(url, key);
+const PROFILE_COLUMNS = 'id,name,age,gender,city,country,bio,interests,looking_for,photo,photos,online,verified,admin_badge,latitude,longitude,last_active_at,created_at';
 const ADMIN_EMAIL = (import.meta.env.VITE_NAIJA_CONNECT_ADMIN_EMAIL || 'cinddycook@gmail.com').trim();
 function isAdminUser(u:any) { return u?.app_metadata?.role === 'admin' || (Array.isArray(u?.app_metadata?.roles) && u.app_metadata.roles.includes('admin')) || u?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase(); }
 
@@ -38,7 +39,7 @@ async function getProfiles(passive=false) {
   if (me && !passive) {
     await supabase.from('profiles').update({last_active_at:new Date().toISOString(),online:true}).eq('id',me.id);
   }
-  const { data, error } = await supabase.from('profiles').select('*').order('created_at',{ascending:false});
+  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).order('created_at',{ascending:false});
   if (error) throw error;
   let rows = data || [];
   if (me) {
@@ -117,7 +118,7 @@ export const api = {
     const u = await currentUser();
     if (path === '/api/me') {
       if (!u) return {data:{profile:null}};
-      const {data,error}=await supabase.from('profiles').select('*').eq('id',u.id).maybeSingle();
+      const {data,error}=await supabase.from('profiles').select(PROFILE_COLUMNS).eq('id',u.id).maybeSingle();
       if(error) throw error;
       return {data:{profile:mapProfile(data)}};
     }
@@ -127,14 +128,14 @@ export const api = {
       const {data,error}=await supabase.from('profile_reports').select('*').order('created_at',{ascending:false});
       if(error) throw error;
       const ids=Array.from(new Set((data||[]).flatMap((r:any)=>[r.reporter_id,r.reported_id]).filter(Boolean)));
-      const {data:profiles,error:profilesError}=ids.length ? await supabase.from('profiles').select('*').in('id',ids) : {data:[],error:null};
+      const {data:profiles,error:profilesError}=ids.length ? await supabase.from('profiles').select(PROFILE_COLUMNS).in('id',ids) : {data:[],error:null};
       if(profilesError) throw profilesError;
       const byId=new Map((profiles||[]).map((p:any)=>[p.id,mapProfile(p)]));
       return {data:{reports:(data||[]).map((r:any)=>({id:r.id,reason:r.reason,details:r.details,status:r.status,createdAt:new Date(r.created_at).getTime(),reporter:byId.get(r.reporter_id)||null,reported:byId.get(r.reported_id)||null}))}};
     }
     if (path === '/api/admin/users') {
       if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
-      const {data:profiles,error:profilesError}=await supabase.from('profiles').select('*').order('created_at',{ascending:false});
+      const {data:profiles,error:profilesError}=await supabase.from('profiles').select(PROFILE_COLUMNS).order('created_at',{ascending:false});
       if(profilesError) throw profilesError;
       const {data:contacts,error:contactsError}=await supabase.from('user_contacts').select('user_id,phone');
       if(contactsError) throw contactsError;
@@ -172,7 +173,7 @@ export const api = {
         if(m.sender_type==='user' && !m.read_at) grouped.get(m.user_id).unreadCount++;
       }
       const ids=Array.from(grouped.keys());
-      const {data:people,error:peopleError}=ids.length ? await supabase.from('profiles').select('*').in('id',ids) : {data:[],error:null};
+      const {data:people,error:peopleError}=ids.length ? await supabase.from('profiles').select(PROFILE_COLUMNS).in('id',ids) : {data:[],error:null};
       if(peopleError) throw peopleError;
       const byId=new Map((people||[]).map((p:any)=>[p.id,mapProfile(p)]));
       return {data:{threads:ids.map(id=>({...grouped.get(id),profile:byId.get(id)||null}))}};
@@ -195,10 +196,13 @@ export const api = {
     }
     if (path.startsWith('/api/messages/')) {
       const other=path.split('/').pop();
-      if(!u) throw new Error('Unauthorized');
-      const {data,error}=await supabase.from('messages').select('*').or('sender_id.eq.'+u.id+',receiver_id.eq.'+u.id).order('created_at',{ascending:true});
+      if(!u || !other) throw new Error('Unauthorized');
+      // Limit the query to this exact conversation instead of downloading
+      // every message belonging to the signed-in user and filtering in JS.
+      const conversationFilter='and(sender_id.eq.'+u.id+',receiver_id.eq.'+other+'),and(sender_id.eq.'+other+',receiver_id.eq.'+u.id+')';
+      const {data,error}=await supabase.from('messages').select('id,sender_id,receiver_id,text,created_at').or(conversationFilter).order('created_at',{ascending:true});
       if(error) throw error;
-      return {data:{messages:(data||[]).filter((m:any)=>m.sender_id===other||m.receiver_id===other).map((m:any)=>({id:m.id,senderId:m.sender_id,receiverId:m.receiver_id,text:m.text,createdAt:new Date(m.created_at).getTime()}))}};
+      return {data:{messages:(data||[]).map((m:any)=>({id:m.id,senderId:m.sender_id,receiverId:m.receiver_id,text:m.text,createdAt:new Date(m.created_at).getTime()}))}};
     }
     throw new Error('Unsupported GET '+path);
   },
@@ -212,15 +216,15 @@ export const api = {
       }
       const row:any={id:u.id,name:String(body.name||'').trim(),age:Number(body.age),gender:body.gender||null,city:String(body.city||'').trim(),country:body.country||'Nigeria',bio:body.bio||'',interests:Array.isArray(body.interests)?body.interests:[],looking_for:body.lookingFor||'Dating / connection',last_active_at:new Date().toISOString(),online:true};
       if(photo) row.photo=photo;
-      if(Array.isArray(body.photosData)){
+      if(Array.isArray(body.photosData) || Array.isArray(body.existingPhotos)){
         const uploaded:string[]=[];
-        for(let i=0;i<body.photosData.length;i++){
-          const item=String(body.photosData[i]||'');
+        for(let i=0;i<(body.photosData||[]).length;i++){
+          const item=String((body.photosData||[])[i]||'');
           if(item) uploaded.push(await uploadMedia(u.id,item,(body.photoContentTypes||[])[i]||'image/jpeg','profiles'));
         }
         const existing=Array.isArray(body.existingPhotos)?body.existingPhotos.filter((x:any)=>typeof x==='string'&&x):[];
-        row.photos=[...existing,...uploaded].slice(-6);
-        if(row.photos[0]) row.photo=row.photos[0];
+        row.photos=[...existing,...uploaded].slice(0,6);
+        row.photo=row.photos[0]||null;
       }
       const {data,error}=await supabase.from('profiles').upsert(row,{onConflict:'id'}).select().single();
       if(error) throw new Error('Could not save profile details. ' + error.message);

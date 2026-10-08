@@ -190,8 +190,16 @@ function App() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [path, setPath] = useState(route());
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
   const refresh = async (showLoading = false) => {
+    // Auth events and the periodic fallback can arrive together. Reuse the
+    // active refresh instead of issuing duplicate Supabase requests.
+    if (refreshInFlight.current) {
+      if (showLoading) setLoading(true);
+      return refreshInFlight.current;
+    }
+    const run = (async () => {
     if (showLoading) setLoading(true);
     try {
       const u = await auth.getUser();
@@ -207,17 +215,20 @@ function App() {
           const likesResponse = await api.get('/api/likes/me');
           setInterestedIds(new Set((likesResponse.data.likes || []).map((x:any)=>x.profile_id)));
         } catch { setInterestedIds(new Set()); }
-        try {
-          const postsResponse = await api.get('/api/posts');
-          setPosts(postsResponse.data.posts || []);
-        } catch (postError:any) {
-          setPosts([]);
-          setNotice(postError?.message || 'Community posts could not be loaded.');
-        }
+        // Community/posts routes are currently redirected to Discover, so don't
+        // fetch the full posts feed on every background refresh. Posts can still
+        // be created through the existing API without adding this recurring load.
       }
-    } catch {
-      setNotice('Some live data could not be loaded yet. Demo profiles remain available.');
-    } finally { if (showLoading) setLoading(false); }
+      } catch {
+        setNotice('Some live data could not be loaded yet. Demo profiles remain available.');
+      } finally { if (showLoading) setLoading(false); }
+    })();
+    refreshInFlight.current = run;
+    try {
+      await run;
+    } finally {
+      if (refreshInFlight.current === run) refreshInFlight.current = null;
+    }
   };
 
   useEffect(() => {
@@ -254,7 +265,7 @@ function App() {
 
   useEffect(() => {
     if (!user) return;
-    const timer = window.setInterval(() => { refresh(false); }, 8000);
+    const timer = window.setInterval(() => { refresh(false); }, 30000);
     return () => window.clearInterval(timer);
   }, [user?.userId]);
 
@@ -278,12 +289,14 @@ function App() {
         window.dispatchEvent(new CustomEvent('naijaconnect-message'));
       })
       .subscribe();
+    // Realtime profile updates handle normal changes. Keep a slower fallback
+    // refresh for clients where realtime delivery is temporarily unavailable.
     const timer = window.setInterval(async () => {
       try {
         const r = await api.get('/api/profiles?passive=1');
         setProfiles(r.data.profiles || []);
       } catch {}
-    }, 15000);
+    }, 60000);
     return () => { window.clearInterval(timer); supabase.removeChannel(channel); };
   }, [user?.userId]);
 
@@ -405,7 +418,7 @@ function App() {
     {user && path === '/interested' && <InterestedPage profiles={profiles} interested={interestedIds} onLike={like} demoInterested={demoInterested} />}
     {user && (path === '/posts' || path === '/community') && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
 
-    {path.startsWith('/profile/') && <ProfilePage id={path.split('/')[2]} profiles={profiles} user={user} onLike={like} onConnect={connectToAdmin} />}
+    {user && path.startsWith('/profile/') && <ProfilePage id={path.split('/')[2]} profiles={profiles} user={user} onLike={like} onConnect={connectToAdmin} />}
     {path === '/admin' && isAdminUser(user) && <AdminPage />}
     {path === '/admin-messages' && user && <AdminMessages />}
     {user && path === '/profile' && <MyProfile user={user} profile={profile} onSaved={refresh} />}
@@ -1247,7 +1260,7 @@ function AdminPage(){
     }catch{setMessages([]);}
   };
   useEffect(()=>{Promise.all([loadUsers(),loadThreads(),loadReports()]);},[]);
-  useEffect(()=>{const timer=window.setInterval(()=>{loadThreads(); if(selected) loadThread(selected.id,false);},5000);return()=>window.clearInterval(timer);},[selected?.id]);
+  useEffect(()=>{const timer=window.setInterval(()=>{loadThreads(); if(selected) loadThread(selected.id,false);},15000);return()=>window.clearInterval(timer);},[selected?.id]);
   const select=async(u:any)=>{setSelected(u);setReplyTo(null);setStatus('');setShowChatMobile(true);await loadThread(u.id,true);};
   const visibleUsers=users.filter(u=>{const q=search.trim().toLowerCase();return !q || String(u.name||'').toLowerCase().includes(q) || String(u.city||'').toLowerCase().includes(q) || String(u.phone||'').toLowerCase().includes(q);});
   const selectThread=async(t:any)=>{
@@ -1321,7 +1334,7 @@ function AdminMessages(){
       if(markRead) await api.post('/api/admin/messages/read',{});
     }catch{}
   };
-  useEffect(()=>{load(true);const timer=window.setInterval(()=>load(false),5000);return()=>window.clearInterval(timer);},[]);
+  useEffect(()=>{load(true);const timer=window.setInterval(()=>load(false),15000);return()=>window.clearInterval(timer);},[]);
   const hasAdminMessage=messages.some(m=>m.senderType==='admin');
   const react=async(m:any,reaction:string)=>{try{await api.post('/api/admin/message-reaction',{messageId:m.id,reaction});await load(false);}catch{}};
   const send=async()=>{if(!text.trim()||busy||!hasAdminMessage)return;setBusy(true);try{await api.post('/api/admin/messages',{text:text.trim(),replyToId:replyTo?.id||null});setText('');setReplyTo(null);await load(true);}finally{setBusy(false);}};
