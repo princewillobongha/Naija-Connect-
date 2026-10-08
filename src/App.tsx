@@ -141,7 +141,8 @@ const demoProfiles: Profile[] = [
 ];
 
 function go(path: string) {
-  window.location.hash = path;
+  const normalized = path.startsWith('#') ? path : '#' + path;
+  if (window.location.hash !== normalized) window.location.hash = normalized;
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 function route() {
@@ -418,7 +419,7 @@ function App() {
     {user && path === '/interested' && <InterestedPage profiles={profiles} interested={interestedIds} onLike={like} demoInterested={demoInterested} />}
     {user && (path === '/posts' || path === '/community') && <Discover profiles={profiles} onLike={like} interested={demoInterested} />}
 
-    {user && path.startsWith('/profile/') && <ProfilePage id={path.split('/')[2]} profiles={profiles} user={user} onLike={like} onConnect={connectToAdmin} />}
+    {path.startsWith('/profile/') && <ProfilePage id={path.split('/')[2]} profiles={profiles} user={user} ownProfile={profile} onLike={like} onConnect={connectToAdmin} />}
     {path === '/admin' && isAdminUser(user) && <AdminPage />}
     {path === '/admin-messages' && user && <AdminMessages />}
     {user && path === '/profile' && <MyProfile user={user} profile={profile} onSaved={refresh} />}
@@ -722,16 +723,17 @@ function ProfileCard({p,onLike,interested}:{p:Profile,onLike:(id:string)=>void,i
   </article>
 }
 
-function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Profile[],user:any,onLike:(id:string)=>void,onConnect:(p:Profile)=>void}){
+function ProfilePage({id,profiles,user,ownProfile,onLike,onConnect}:{id:string,profiles:Profile[],user:any,ownProfile?:Profile|null,onLike:(id:string)=>void,onConnect:(p:Profile)=>void}){
   // A profile can be addressed by either its database profile id or the
   // authenticated user's id. "View my profile" uses the latter, so support
   // both identifiers instead of incorrectly reporting the profile as missing.
-  const p=profiles.find(x=>x.id===id || x.userId===id)||demoProfiles.find(x=>x.id===id || x.userId===id);
+  const p=(ownProfile && (ownProfile.id===id || ownProfile.userId===id) ? ownProfile : null) || profiles.find(x=>x.id===id || x.userId===id) || demoProfiles.find(x=>x.id===id || x.userId===id);
   const own=!!user&&p?.userId===user.userId;
   const [menu,setMenu]=useState(false);
   const [slide,setSlide]=useState(0);
   const photos=(p?.photos&&p.photos.length?p.photos:(p?.photo?[p.photo]:[]));
-  if(!p)return <Empty title="Profile not found" text="This profile may have been removed." action={()=>go('/discover')} actionText="Back to discover"/>;
+  const interests=Array.isArray(p?.interests)?p.interests:[];
+  if(!p)return <Empty title="Profile not found" text="We couldn't load this profile yet. Please try again." action={()=>window.dispatchEvent(new Event('naijaconnect-profile-updated'))} actionText="Try again"/>;
   const share=async()=>{try{if(navigator.share) await navigator.share({title:'NaijaConnect profile',text:'Check out '+p.name+' on NaijaConnect.',url:window.location.href});else await navigator.clipboard.writeText(window.location.href);setMenu(false);}catch{}};
   const report=async()=>{const reason=window.prompt('Why are you reporting this profile?','Suspicious or fake profile');if(!reason)return;try{await api.post('/api/reports',{profileId:p.id,reason});setMenu(false);alert('Report submitted. Thank you for helping keep NaijaConnect safe.');}catch(e:any){alert(e?.message||'Could not submit the report.');}};
   const block=async()=>{if(!window.confirm('Block '+p.name+'? You will no longer see this profile in Discover.'))return;try{const r=await api.post('/api/blocks',{profileId:p.id});setMenu(false);if(r.data.blocked){alert('Profile blocked.');go('/discover');}}catch(e:any){alert(e?.message||'Could not block this profile.');}};
@@ -746,8 +748,8 @@ function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Pro
       <div className="profile-status-card"><span className={p.online?'status-dot online':'status-dot'}></span><div><strong>{p.online?'Online now':'Recently active'}</strong><small>Available to connect through NaijaConnect</small></div></div>
       <p className="big-bio">{p.bio||'This member has not added a bio yet.'}</p>
       <div className="detail-section"><h3>About</h3><p>{p.city}, {p.country}</p></div>
-      {p.interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{p.interests.map(x=><span key={x}>{x}</span>)}</div></div>}
-      <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor}</p></div>
+      {interests.length>0&&<div className="detail-section"><h3>Interests</h3><div className="tags large">{interests.map(x=><span key={x}>{x}</span>)}</div></div>}
+      <div className="detail-section"><h3>Looking for</h3><p>{p.lookingFor||'Connection'}</p></div>
       {!own&&<div className="detail-actions"><button className="primary" onClick={()=>onConnect(p)}><MessageCircle size={18}/> Connect</button><button className="secondary" onClick={()=>onLike(p.id)}><Heart size={18} fill="currentColor"/> Interested</button></div>}
       {own&&<button className="primary" onClick={()=>go('/profile')}>Edit my profile</button>}
     </div>
