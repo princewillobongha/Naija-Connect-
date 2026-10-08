@@ -190,8 +190,16 @@ function App() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [path, setPath] = useState(route());
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
   const refresh = async (showLoading = false) => {
+    // Auth events and the periodic fallback can arrive together. Reuse the
+    // active refresh instead of issuing duplicate Supabase requests.
+    if (refreshInFlight.current) {
+      if (showLoading) setLoading(true);
+      return refreshInFlight.current;
+    }
+    const run = (async () => {
     if (showLoading) setLoading(true);
     try {
       const u = await auth.getUser();
@@ -211,9 +219,16 @@ function App() {
         // fetch the full posts feed on every background refresh. Posts can still
         // be created through the existing API without adding this recurring load.
       }
-    } catch {
-      setNotice('Some live data could not be loaded yet. Demo profiles remain available.');
-    } finally { if (showLoading) setLoading(false); }
+      } catch {
+        setNotice('Some live data could not be loaded yet. Demo profiles remain available.');
+      } finally { if (showLoading) setLoading(false); }
+    })();
+    refreshInFlight.current = run;
+    try {
+      await run;
+    } finally {
+      if (refreshInFlight.current === run) refreshInFlight.current = null;
+    }
   };
 
   useEffect(() => {
