@@ -724,14 +724,16 @@ function ProfileCard({p,onLike,interested}:{p:Profile,onLike:(id:string)=>void,i
 }
 
 function ProfilePage({id,profiles,user,ownProfile,onLike,onConnect}:{id:string,profiles:Profile[],user:any,ownProfile?:Profile|null,onLike:(id:string)=>void,onConnect:(p:Profile)=>void}){
+  // Keep all hooks before any derived render values. This prevents a
+  // temporal-dead-zone crash when View Profile opens.
+  const [menu,setMenu]=useState(false);
+  const [slide,setSlide]=useState(0);
+  const [loadedProfile,setLoadedProfile]=useState<Profile|null>(null);
   // A profile can be addressed by either its database profile id or the
   // authenticated user's id. "View my profile" uses the latter, so support
   // both identifiers instead of incorrectly reporting the profile as missing.
   const p=(ownProfile && (ownProfile.id===id || ownProfile.userId===id) ? ownProfile : null) || (loadedProfile && (loadedProfile.id===id || loadedProfile.userId===id) ? loadedProfile : null) || profiles.find(x=>x.id===id || x.userId===id) || demoProfiles.find(x=>x.id===id || x.userId===id);
   const own=!!user&&p?.userId===user.userId;
-  const [menu,setMenu]=useState(false);
-  const [slide,setSlide]=useState(0);
-  const [loadedProfile,setLoadedProfile]=useState<Profile|null>(null);
   useEffect(()=>{let alive=true;(async()=>{try{const r=await api.get('/api/me');if(alive&&r.data?.profile)setLoadedProfile(r.data.profile);}catch{}})();return()=>{alive=false;};},[id,user?.userId]);
   const photos=(p?.photos&&p.photos.length?p.photos:(p?.photo?[p.photo]:[]));
   const interests=Array.isArray(p?.interests)?p.interests:[];
