@@ -440,32 +440,66 @@ function ResetPassword() {
 
 function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;signIn:()=>void;signOut:()=>void}) {
   const [open,setOpen]=useState(false);
+  const [notificationOpen,setNotificationOpen]=useState(false);
   const [unreadCount,setUnreadCount]=useState(0);
+  const [notifications,setNotifications]=useState<any[]>([]);
   const admin=isAdminUser(user);
+
+  const loadUnread=async()=>{
+    if(!user){setUnreadCount(0);setNotifications([]);return;}
+    try{
+      const r=await api.get('/api/admin/messages/unread-count');
+      setUnreadCount(Number(r.data.count||0));
+    }catch{setUnreadCount(0);}
+  };
+  const loadNotifications=async()=>{
+    if(!user)return;
+    try{
+      if(admin){
+        const r=await api.get('/api/admin/message-threads');
+        const items=(r.data.threads||[]).filter((t:any)=>Number(t.unreadCount||0)>0).slice(0,8);
+        setNotifications(items);
+      }else{
+        const r=await api.get('/api/admin/messages');
+        const items=(r.data.messages||[]).filter((m:any)=>m.senderType==='admin').slice(-8).reverse();
+        setNotifications(items);
+      }
+      await loadUnread();
+    }catch{}
+  };
+
   useEffect(()=>{
     let alive=true;
-    const loadUnread=async()=>{
-      if(!user) { if(alive) setUnreadCount(0); return; }
-      try {
-        const r=await api.get('/api/admin/messages/unread-count');
-        if(alive) setUnreadCount(Number(r.data.count||0));
-      } catch { if(alive) setUnreadCount(0); }
-    };
-    loadUnread();
-    const onLiveMessage=()=>{ loadUnread(); };
-    window.addEventListener('naijaconnect-message', onLiveMessage);
+    const run=async()=>{if(!alive)return;await loadUnread();};
+    run();
+    const onLiveMessage=()=>{loadUnread();if(notificationOpen)loadNotifications();};
+    window.addEventListener('naijaconnect-message',onLiveMessage);
     const timer=window.setInterval(loadUnread,30000);
-    return ()=>{alive=false;window.clearInterval(timer);window.removeEventListener('naijaconnect-message', onLiveMessage);};
-  },[user?.userId,admin]);
+    return ()=>{alive=false;window.clearInterval(timer);window.removeEventListener('naijaconnect-message',onLiveMessage);};
+  },[user?.userId,admin,notificationOpen]);
+
   useEffect(()=>{
-    const title=unreadCount>0 ? '('+(unreadCount>99?'99+':unreadCount)+') NaijaConnect' : 'NaijaConnect';
+    const title=unreadCount>0?'('+(unreadCount>99?'99+':unreadCount)+') NaijaConnect':'NaijaConnect';
     document.title=title;
     return ()=>{document.title='NaijaConnect';};
   },[unreadCount]);
+
+  const toggleNotifications=async()=>{
+    const next=!notificationOpen;
+    setNotificationOpen(next);
+    if(next) await loadNotifications();
+  };
+
   return <header className="topbar">
     <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
     <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
-    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button><button className="notification-btn" onClick={()=>go(admin?'/admin':'/admin-messages')} aria-label={unreadCount>0?'Open messages with '+unreadCount+' unread':'Open messages'} title={unreadCount>0?(unreadCount+' unread message'+(unreadCount===1?'':'s')):'Messages'}><Bell size={19}/>{unreadCount>0&&<span className="notification-count">{unreadCount>99?'99+':unreadCount}</span>}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
+    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button><button className={notificationOpen?'notification-btn active':'notification-btn'} onClick={toggleNotifications} aria-label="Open notifications" title="Notifications"><Bell size={19}/>{unreadCount>0&&<span className="notification-count">{unreadCount>99?'99+':unreadCount}</span>}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> <span>ADMIN</span></span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></div>
+    {notificationOpen&&<div className="notification-panel" role="dialog" aria-label="Notifications">
+      <div className="notification-panel-head"><strong>Notifications</strong>{unreadCount>0&&<span>{unreadCount} new</span>}</div>
+      {admin ? (notifications.length ? notifications.map((n:any)=><button className="notification-item" key={n.userId} onClick={()=>{setNotificationOpen(false);go('/admin')}}><Avatar p={n.profile||{name:n.profile?.name||'Member'}}/><span><strong>{n.profile?.name||'Member'}</strong><small>{n.unreadCount} new message{Number(n.unreadCount)===1?'':'s'}{n.latest?.text?' · '+n.latest.text:''}</small></span><ChevronRight size={16}/></button>) : <div className="notification-empty">No new member messages.</div>)
+      : (notifications.length ? notifications.map((n:any)=><button className="notification-item" key={n.id} onClick={()=>{setNotificationOpen(false);go('/admin-messages')}}><Avatar p={{name:'NaijaConnect Admin'}}/><span><strong>NaijaConnect Admin</strong><small>{n.text}</small></span><ChevronRight size={16}/></button>) : <div className="notification-empty">No new notifications.</div>)}
+      <button className="notification-open-all" onClick={()=>{setNotificationOpen(false);go(admin?'/admin':'/admin-messages')}}>Open messages</button>
+    </div>}
     {open&&user&&<div className="account-menu">
       <button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button>
       <button onClick={()=>{setOpen(false);go('/interested')}}><Heart size={17}/> Interested</button>
