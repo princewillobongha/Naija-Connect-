@@ -154,13 +154,41 @@ export const api = {
       if(error) throw error;
       return {data:{requests:(data||[]).map((r:any)=>({...r,userName:r.user_name,profileName:r.profile_name}))}};
     }
+    if (path === '/api/admin/messages/unread-count') {
+      if (!u) throw new Error('Unauthorized');
+      const isAdmin = isAdminUser(u);
+      const query = supabase.from('admin_messages').select('id', { count:'exact', head:true }).is('read_at', null);
+      const {count,error}=isAdmin ? await query.eq('sender_type','user') : await query.eq('user_id',u.id).eq('sender_type','admin');
+      if(error) throw error;
+      return {data:{count:count||0}};
+    }
+    if (path === '/api/admin/message-threads') {
+      if (!u || !isAdminUser(u)) throw new Error('Unauthorized');
+      const {data:rows,error}=await supabase.from('admin_messages').select('*').order('created_at',{ascending:false});
+      if(error) throw error;
+      const grouped=new Map<string,any>();
+      for(const m of rows||[]){
+        if(!grouped.has(m.user_id)) grouped.set(m.user_id,{userId:m.user_id,latest:{id:m.id,text:m.text,senderType:m.sender_type,createdAt:new Date(m.created_at).getTime()},unreadCount:0});
+        if(m.sender_type==='user' && !m.read_at) grouped.get(m.user_id).unreadCount++;
+      }
+      const ids=Array.from(grouped.keys());
+      const {data:people,error:peopleError}=ids.length ? await supabase.from('profiles').select('*').in('id',ids) : {data:[],error:null};
+      if(peopleError) throw peopleError;
+      const byId=new Map((people||[]).map((p:any)=>[p.id,mapProfile(p)]));
+      return {data:{threads:ids.map(id=>({...grouped.get(id),profile:byId.get(id)||null}))}};
+    }
     if (path.startsWith('/api/admin/messages')) {
       if (!u) throw new Error('Unauthorized');
       const isAdmin = isAdminUser(u);
       const query = supabase.from('admin_messages').select('*').order('created_at',{ascending:true});
       const {data,error}=isAdmin ? await query : await query.eq('user_id',u.id);
       if(error) throw error;
-      return {data:{messages:(data||[]).map((m:any)=>({id:m.id,userId:m.user_id,text:m.text,senderType:m.sender_type,createdAt:new Date(m.created_at).getTime()}))}};
+      const ids=(data||[]).map((m:any)=>m.id);
+      const {data:reactionRows,error:reactionError}=ids.length ? await supabase.from('admin_message_reactions').select('message_id,user_id,reaction').in('message_id',ids) : {data:[],error:null};
+      if(reactionError) throw reactionError;
+      const reactionsBy=new Map<string,any[]>();
+      for(const x of reactionRows||[]){const list=reactionsBy.get(x.message_id)||[];list.push({userId:x.user_id,reaction:x.reaction});reactionsBy.set(x.message_id,list);}
+      return {data:{messages:(data||[]).map((m:any)=>({id:m.id,userId:m.user_id,text:m.text,senderType:m.sender_type,createdAt:new Date(m.created_at).getTime(),readAt:m.read_at?new Date(m.read_at).getTime():null,replyToId:m.reply_to_id||null,reactions:reactionsBy.get(m.id)||[]}))}};
     }
     if (path.startsWith('/api/messages/')) {
       const other=path.split('/').pop();
@@ -269,14 +297,55 @@ export const api = {
       if(error) throw error;
       return {data:{profile:mapProfile(data)}};
     }
+    if(path==='/api/admin/messages/read'){
+      if(!u) throw new Error('Sign in required');
+      const target = isAdminUser(u) ? (body.userId || null) : null;
+      const {error}=await supabase.rpc('mark_admin_messages_read',{target_user_id:target});
+      if(error) throw error;
+      return {data:{ok:true}};
+    }
+    if(path==='/api/admin/message-reaction'){
+      if(!u) throw new Error('Sign in required');
+      if(!body.messageId) throw new Error('Message is required.');
+      const {data:message,error:messageError}=await supabase.from('admin_messages').select('id,user_id').eq('id',body.messageId).maybeSingle();
+      if(messageError) throw messageError;
+      if(!message) throw new Error('Message not found.');
+      if(!isAdminUser(u) && message.user_id!==u.id) throw new Error('Unauthorized');
+      const reaction=String(body.reaction||'').trim();
+      const allowed=['👍','❤️','😂','😮','😢','🙏'];
+      if(!allowed.includes(reaction)) throw new Error('Unsupported reaction.');
+      const {data:existing}=await supabase.from('admin_message_reactions').select('id,reaction').eq('message_id',body.messageId).eq('user_id',u.id).maybeSingle();
+      if(existing){
+        if(existing.reaction===reaction){
+          const {error}=await supabase.from('admin_message_reactions').delete().eq('id',existing.id);
+          if(error) throw error;
+        } else {
+          const {error}=await supabase.from('admin_message_reactions').update({reaction}).eq('id',existing.id);
+          if(error) throw error;
+        }
+      } else {
+        const {error}=await supabase.from('admin_message_reactions').insert({message_id:body.messageId,user_id:u.id,reaction});
+        if(error) throw error;
+      }
+      return {data:{ok:true}};
+    }
     if(path==='/api/admin/messages'){
       const admin = isAdminUser(u);
       const targetUserId = admin ? body.userId : u.id;
       if(!targetUserId) throw new Error('Recipient is required.');
       const senderType = admin ? 'admin' : 'user';
-      const {data,error}=await supabase.from('admin_messages').insert({user_id:targetUserId,text:String(body.text||'').trim(),sender_type:senderType}).select().single();
+      const clean=String(body.text||'').trim();
+      if(!clean) throw new Error('Message cannot be empty.');
+      let replyToId:any=null;
+      if(body.replyToId){
+        const {data:reply,error:replyError}=await supabase.from('admin_messages').select('id,user_id').eq('id',body.replyToId).eq('user_id',targetUserId).maybeSingle();
+        if(replyError) throw replyError;
+        if(!reply) throw new Error('The message you are replying to is no longer available.');
+        replyToId=reply.id;
+      }
+      const {data,error}=await supabase.from('admin_messages').insert({user_id:targetUserId,text:clean,sender_type:senderType,reply_to_id:replyToId}).select().single();
       if(error) throw error;
-      return {data:{message:{id:data.id,userId:data.user_id,senderType:data.sender_type,text:data.text,createdAt:new Date(data.created_at).getTime()}}};
+      return {data:{message:{id:data.id,userId:data.user_id,senderType:data.sender_type,text:data.text,createdAt:new Date(data.created_at).getTime(),readAt:null,replyToId:data.reply_to_id||null,reactions:[]}}};
     }
     if(path==='/api/delete-my-account'){
       const {error}=await supabase.rpc('delete_my_account');
