@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { api, auth, ws } from './lib/backend';
+import { api, auth, supabase, ws } from './lib/backend';
 import {
   Heart,
   MessageCircle,
@@ -256,6 +256,31 @@ function App() {
     if (notice) { const t = setTimeout(() => setNotice(''), 3500); return () => clearTimeout(t); }
   }, [notice]);
 
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel('naijaconnect-live')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, async () => {
+        try {
+          const r = await api.get('/api/profiles?passive=1');
+          setProfiles(r.data.profiles || []);
+          const me = await api.get('/api/me');
+          setProfile(me.data.profile || null);
+        } catch {}
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'admin_messages' }, () => {
+        window.dispatchEvent(new CustomEvent('naijaconnect-message'));
+      })
+      .subscribe();
+    const timer = window.setInterval(async () => {
+      try {
+        const r = await api.get('/api/profiles?passive=1');
+        setProfiles(r.data.profiles || []);
+      } catch {}
+    }, 15000);
+    return () => { window.clearInterval(timer); supabase.removeChannel(channel); };
+  }, [user?.userId]);
+
   const signIn = async (email?: string, password?: string) => {
     try { await auth.signInWithPassword(String(email || ''), String(password || '')); setNotice('You are signed in successfully.'); return { ok: true, message: '' }; }
     catch (e: any) {
@@ -396,21 +421,41 @@ function ResetPassword() {
 
 function Header({user,profile,signIn,signOut}:{user:any;profile:Profile|null;signIn:()=>void;signOut:()=>void}) {
   const [open,setOpen]=useState(false);
+  const [unreadCount,setUnreadCount]=useState(0);
   const [hasAdminMessage,setHasAdminMessage]=useState(false);
   const admin=isAdminUser(user);
+  const loadUnread=async()=>{
+    if(!user) { setUnreadCount(0); setHasAdminMessage(false); return; }
+    try {
+      const r=await api.get('/api/admin/messages/unread-count');
+      const count=Number(r.data.count||0);
+      setUnreadCount(count);
+      if(!admin){
+        const m=await api.get('/api/admin/messages');
+        setHasAdminMessage((m.data.messages||[]).some((x:any)=>x.senderType==='admin'));
+      }
+    } catch { setUnreadCount(0); }
+  };
   useEffect(()=>{
-    let alive=true;
-    if(!user || admin){ setHasAdminMessage(false); return ()=>{alive=false;}; }
-    api.get('/api/admin/messages').then((r:any)=>{
-      if(alive) setHasAdminMessage((r.data.messages||[]).some((m:any)=>m.senderType==='admin'));
-    }).catch(()=>{ if(alive) setHasAdminMessage(false); });
-    return ()=>{alive=false;};
+    loadUnread();
+    const timer=window.setInterval(loadUnread,5000);
+    const handler=()=>loadUnread();
+    window.addEventListener('naijaconnect-message',handler);
+    return ()=>{window.clearInterval(timer);window.removeEventListener('naijaconnect-message',handler);};
   },[user?.userId,admin]);
   return <header className="topbar">
     <button className="brand" onClick={()=>go('/')}><span className="brand-dot">N</span><span><strong>NaijaConnect</strong><small>Meet. Match. Connect.</small></span></button>
     <nav className="desktop-links"><button onClick={()=>go('/discover')}>Discover</button><button onClick={()=>go('/profile')}>My Profile</button></nav>
-    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/></button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
-    {open&&user&&<div className="account-menu"><button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button><button onClick={()=>{setOpen(false);go('/interested')}}><Heart size={17}/> Interested</button>{hasAdminMessage&&<button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages</button>}{admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox</button>}<button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button><button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button><button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button></div>}
+    <div className="top-actions">{user?<><button className="avatar-mini" onClick={()=>go('/profile')}>{profile?.photo?<img src={profile.photo} alt=""/>:initials(profile?.name||user.name||'You')}</button>{admin&&<span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span>}<button className="menu-btn" onClick={()=>setOpen(v=>!v)} aria-label="Open menu"><Menu size={21}/>{unreadCount>0&&<span className="nav-notification-dot">{unreadCount>99?'99+':unreadCount}</span>}</button></>:<button className="sign-btn" onClick={()=>go('/login')}><LogIn size={17}/> Sign in</button>}</div>
+    {open&&user&&<div className="account-menu">
+      <button onClick={()=>{setOpen(false);go('/profile')}}><UserRound size={17}/> My Profile</button>
+      <button onClick={()=>{setOpen(false);go('/interested')}}><Heart size={17}/> Interested</button>
+      {(hasAdminMessage||(!admin&&unreadCount>0))&&<button onClick={()=>{setOpen(false);go('/admin-messages')}}><MessageCircle size={17}/> Admin Messages{unreadCount>0&&!admin&&<span className="menu-unread">{unreadCount}</span>}</button>}
+      {admin&&<button onClick={()=>{setOpen(false);go('/admin')}}><ShieldCheck size={17}/> Admin Inbox{unreadCount>0&&<span className="menu-unread">{unreadCount}</span>}</button>}
+      <button onClick={()=>{setOpen(false);go('/settings')}}><Settings size={17}/> Settings</button>
+      <button onClick={()=>{setOpen(false);go('/safety')}}><ShieldCheck size={17}/> Safety</button>
+      <button onClick={()=>{setOpen(false);signOut()}}><LogOut size={17}/> Sign out</button>
+    </div>}
   </header>;
 }
 
@@ -1091,62 +1136,97 @@ function Avatar({ p }: { p: Profile }) {
     </span>
   );
 }
+function AdminMessageBubble({m,messages,mine,displayName,onReply,onReact}:{m:any;messages:any[];mine:boolean;displayName:string;onReply:(m:any)=>void;onReact:(m:any,reaction:string)=>void}) {
+  const [showReactions,setShowReactions]=useState(false);
+  const [startX,setStartX]=useState<number|null>(null);
+  const quoted=m.replyToId ? messages.find((x:any)=>x.id===m.replyToId) : null;
+  const counts=(m.reactions||[]).reduce((acc:any,x:any)=>{acc[x.reaction]=(acc[x.reaction]||0)+1;return acc;},{});
+  return <div className={mine?'admin-chat-message mine':'admin-chat-message'} onTouchStart={e=>setStartX(e.changedTouches[0]?.clientX||0)} onTouchEnd={e=>{const end=e.changedTouches[0]?.clientX||0;if(startX!==null&&Math.abs(end-startX)>55)onReply(m);setStartX(null);}}>
+    {quoted&&<div className="message-quote"><small>Replying to {quoted.senderType==='admin'?'Admin':displayName}</small><span>{quoted.text}</span></div>}
+    <div className="admin-chat-bubble"><small>{mine?'ADMIN':displayName}</small><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>
+    <div className="message-tools">
+      <button onClick={()=>onReply(m)} aria-label="Reply to message">↩ Reply</button>
+      <button onClick={()=>setShowReactions(v=>!v)} aria-label="React to message">☺ React</button>
+    </div>
+    {showReactions&&<div className="reaction-picker">{['👍','❤️','😂','😮','😢','🙏'].map(r=><button key={r} onClick={()=>{onReact(m,r);setShowReactions(false)}}>{r}</button>)}</div>}
+    {Object.keys(counts).length>0&&<div className="message-reactions">{Object.entries(counts).map(([r,c])=><span key={r}>{r} {String(c)}</span>)}</div>}
+  </div>;
+}
+
 function AdminPage(){
   const [users,setUsers]=useState<any[]>([]);
   const [reports,setReports]=useState<any[]>([]);
+  const [threads,setThreads]=useState<any[]>([]);
   const [selected,setSelected]=useState<any>(null);
   const [messages,setMessages]=useState<any[]>([]);
   const [text,setText]=useState('');
+  const [replyTo,setReplyTo]=useState<any>(null);
   const [status,setStatus]=useState('');
   const [tab,setTab]=useState<'members'|'reports'>('members');
   const [search,setSearch]=useState('');
-  const loadUsers=async()=>{try{const r=await api.get('/api/admin/users');setUsers(r.data.users||[]);setStatus('');}catch(e:any){setStatus(e?.message||'Admin member directory could not be loaded.');}};
+  const loadThreads=async()=>{try{const r=await api.get('/api/admin/message-threads');setThreads(r.data.threads||[]);}catch{}};
+  const loadUsers=async()=>{try{const [r,t]=await Promise.all([api.get('/api/admin/users'),api.get('/api/admin/message-threads')]);const ts=t.data.threads||[];const by=new Map(ts.map((x:any)=>[x.userId,x]));setThreads(ts);setUsers((r.data.users||[]).map((u:any)=>({...u,thread:by.get(u.id)||null})));setStatus('');}catch(e:any){setStatus(e?.message||'Admin member directory could not be loaded.');}};
   const loadReports=async()=>{try{const r=await api.get('/api/admin/reports');setReports(r.data.reports||[]);}catch(e:any){setStatus(e?.message||'Reports could not be loaded.');}};
   const loadThread=async(userId:string)=>{try{const r=await api.get('/api/admin/messages?userId='+encodeURIComponent(userId));setMessages(r.data.messages||[]);}catch{setMessages([]);}};
-  useEffect(()=>{loadUsers();loadReports();},[]);
-  const select=async(u:any)=>{setSelected(u);setStatus('');await loadThread(u.id);};
-  const visibleUsers=users.filter(u=>{const q=search.trim().toLowerCase();return !q || String(u.name||'').toLowerCase().includes(q) || String(u.city||'').toLowerCase().includes(q) || String(u.phone||'').toLowerCase().includes(q);});
-  const send=async()=>{const clean=text.trim();if(!selected||!clean)return;try{await api.post('/api/admin/messages',{userId:selected.id,text:clean});setText('');setStatus('Message sent.');await loadThread(selected.id);}catch(e:any){setStatus(e?.message||'Could not send the admin message.');}};
-  const deleteUser=async(u:any)=>{if(!window.confirm('Delete '+(u.name||'this member')+' permanently? This cannot be undone.'))return;try{await api.post('/api/admin/delete-user',{userId:u.id});setUsers(old=>old.filter(x=>x.id!==u.id));if(selected?.id===u.id){setSelected(null);setMessages([]);}setStatus('Member account deleted.');}catch(e:any){setStatus(e?.message||'Could not delete this member.');}};
+  useEffect(()=>{loadUsers();loadReports();const timer=window.setInterval(()=>{loadThreads();loadUsers();},7000);const channel=supabase.channel('admin-inbox-live').on('postgres_changes',{event:'*',schema:'public',table:'admin_messages'},()=>{loadUsers();if(selected)loadThread(selected.id);}).subscribe();return()=>{window.clearInterval(timer);supabase.removeChannel(channel);};},[selected?.id]);
+  const select=async(u:any)=>{setSelected(u);setReplyTo(null);setStatus('');await api.post('/api/admin/messages/read',{userId:u.id});await loadThread(u.id);await loadThreads();};
+  const visibleUsers=users.filter(u=>{const q=search.trim().toLowerCase();return !q||String(u.name||'').toLowerCase().includes(q)||String(u.city||'').toLowerCase().includes(q)||String(u.phone||'').toLowerCase().includes(q);}).sort((a,b)=>(b.thread?.latest?.createdAt||0)-(a.thread?.latest?.createdAt||0));
+  const send=async()=>{const clean=text.trim();if(!selected||!clean)return;try{await api.post('/api/admin/messages',{userId:selected.id,text:clean,replyToId:replyTo?.id});setText('');setReplyTo(null);setStatus('Message sent.');await loadThread(selected.id);await loadUsers();}catch(e:any){setStatus(e?.message||'Could not send the admin message.');}};
+  const react=async(m:any,reaction:string)=>{try{await api.post('/api/admin/message-reaction',{messageId:m.id,reaction});await loadThread(selected.id);}catch(e:any){setStatus(e?.message||'Could not add that reaction.');}};
+  const deleteUser=async(u:any)=>{if(!window.confirm('Delete '+(u.name||'this member')+' permanently? This cannot be undone.'))return;try{await api.post('/api/admin/delete-user',{userId:u.id});setUsers(old=>old.filter(x=>x.id!==u.id));setThreads(old=>old.filter(x=>x.userId!==u.id));if(selected?.id===u.id){setSelected(null);setMessages([]);}setStatus('Member account deleted.');}catch(e:any){setStatus(e?.message||'Could not delete this member.');}};
   const toggleVerified=async(u:any)=>{try{const r=await api.post('/api/admin/verify-user',{userId:u.id,verified:!u.verified});setUsers(old=>old.map(x=>x.id===u.id?{...x,verified:r.data.profile.verified}:x));setSelected((x:any)=>x?.id===u.id?{...x,verified:r.data.profile.verified}:x);setStatus(r.data.profile.verified?'Profile verified.':'Verification removed.');}catch(e:any){setStatus(e?.message||'Could not update verification.');}};
   const toggleAdminBadge=async(u:any)=>{try{const r=await api.post('/api/admin/badge',{userId:u.id,adminBadge:!u.adminBadge});setUsers(old=>old.map(x=>x.id===u.id?{...x,adminBadge:r.data.profile.adminBadge}:x));setSelected((x:any)=>x?.id===u.id?{...x,adminBadge:r.data.profile.adminBadge}:x);setStatus(r.data.profile.adminBadge?'Orange admin badge assigned.':'Orange admin badge removed.');}catch(e:any){setStatus(e?.message||'Could not update the admin badge.');}};
   return <section className="content-page">
-    <div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>NaijaConnect Admin</h1><p>Manage members, messages, safety reports and moderation.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN</span></div>
-    <div className="admin-tabs">
-      <button className={tab==='members'?'admin-tab active':'admin-tab'} onClick={()=>setTab('members')}>Members <span>{users.length}</span></button>
-      <button className={tab==='reports'?'admin-tab active':'admin-tab'} onClick={()=>setTab('reports')}>Reports <span>{reports.filter(x=>x.status==='open').length}</span></button>
-    </div>
-    {tab==='members' && <div className="admin-layout">
+    <div className="page-heading"><div><span className="eyebrow">ADMIN</span><h1>NaijaConnect Admin</h1><p>Manage members, messages, safety reports and moderation.</p></div><span className="admin-badge"><ShieldCheck size={14}/> ADMIN{threads.reduce((n:any,x:any)=>n+(x.unreadCount||0),0)>0&&<b className="admin-unread-pill">{threads.reduce((n:any,x:any)=>n+(x.unreadCount||0),0)}</b>}</span></div>
+    <div className="admin-tabs"><button className={tab==='members'?'admin-tab active':'admin-tab'} onClick={()=>setTab('members')}>Members <span>{users.length}</span></button><button className={tab==='reports'?'admin-tab active':'admin-tab'} onClick={()=>setTab('reports')}>Reports <span>{reports.filter(x=>x.status==='open').length}</span></button></div>
+    {tab==='members'&&<div className="admin-layout">
       <div className="admin-requests">
         <div className="admin-member-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search any member by name or city"/></div>
-        {visibleUsers.map(u=><div className="admin-member-row" key={u.id}><button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small>{u.phone&&<small>Phone: {u.phone}</small>}</button><div className="admin-member-actions"><button className={u.verified?'admin-verify-member active':'admin-verify-member'} onClick={()=>toggleVerified(u)}>{u.verified?'✓ Verified':'Verify'}</button><button className={u.adminBadge?'admin-badge-member active':'admin-badge-member'} onClick={()=>toggleAdminBadge(u)}>{u.adminBadge?'● Orange':'Orange'}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)}>Delete</button></div></div>)}
+        {visibleUsers.map(u=><div className="admin-member-row" key={u.id}>
+          <button className={selected?.id===u.id?'admin-request active':'admin-request'} onClick={()=>select(u)}>
+            <span className="admin-thread-person"><Avatar p={u}/><span><strong>{u.name}, {u.age}</strong><small>{u.city}, {u.country}</small><em>{u.thread?.latest?.text||'No messages yet'}</em></span></span>
+            {u.thread?.unreadCount>0&&<b className="thread-unread">{u.thread.unreadCount}</b>}
+          </button>
+          <div className="admin-member-actions"><button className={u.verified?'admin-verify-member active':'admin-verify-member'} onClick={()=>toggleVerified(u)}>{u.verified?'✓ Verified':'Verify'}</button><button className={u.adminBadge?'admin-badge-member active':'admin-badge-member'} onClick={()=>toggleAdminBadge(u)}>{u.adminBadge?'● Orange':'Orange'}</button><button className="admin-delete-member" onClick={()=>deleteUser(u)}>Delete</button></div>
+        </div>)}
         {!visibleUsers.length&&<div className="empty-mini">{status||(users.length?'No members match your search.':'No member profiles yet.')}</div>}
       </div>
       <div className="admin-chat">
-        {selected ? <><div className="admin-chat-head"><ShieldCheck/><span><strong>NaijaConnect Admin</strong><small>Official admin → {selected.name}</small></span></div><div className="admin-thread">{messages.map(m=><div key={m.id} className={m.senderType==='admin'?'admin-bubble mine':'admin-bubble'}><small>{m.senderType==='admin'?'ADMIN':selected.name}</small><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}{!messages.length&&<div className="empty-mini">No messages yet. Start the conversation.</div>}</div><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message to this member…"/><button className="primary" onClick={send}>Send as Admin</button></> : <div className="empty-mini">Select any member to message them.</div>}
+        {selected?<><div className="admin-chat-head"><Avatar p={selected}/><span><strong>{selected.name}</strong><small>{selected.age} • {selected.city}, {selected.country}</small></span></div>
+          <div className="admin-thread">{messages.map(m=><AdminMessageBubble key={m.id} m={m} messages={messages} mine={m.senderType==='admin'} displayName={selected.name} onReply={setReplyTo} onReact={react}/>)}{!messages.length&&<div className="empty-mini">No messages yet. Start the conversation.</div>}</div>
+          {replyTo&&<div className="reply-compose"><span><strong>Replying to {replyTo.senderType==='admin'?'your message':selected.name}</strong><small>{replyTo.text}</small></span><button onClick={()=>setReplyTo(null)} aria-label="Cancel reply">×</button></div>}
+          <textarea className="admin-message-input" value={text} onChange={e=>setText(e.target.value)} placeholder={replyTo?'Write your reply…':'Write a message to '+selected.name+'…'}/>
+          <button className="primary" onClick={send}>Send as Admin</button>
+        </>:<div className="empty-mini">Select a member from the inbox to open their private chat.</div>}
         {status&&<small className="admin-status">{status}</small>}
       </div>
     </div>}
-    {tab==='reports' && <div className="admin-report-list">{reports.map(report=><article className="admin-report-card" key={report.id}><div><strong>{report.reported?.name||'Member'}</strong><small>Reported by {report.reporter?.name||'Member'} • {new Date(report.createdAt).toLocaleString()}</small></div><span className="report-reason">{report.reason}</span>{report.details&&<p>{report.details}</p>}<small>Status: {report.status}</small></article>)}{!reports.length&&<div className="empty-mini">No safety reports yet.</div>}</div>}
+    {tab==='reports'&&<div className="admin-report-list">{reports.map(report=><article className="admin-report-card" key={report.id}><div><strong>{report.reported?.name||'Member'}</strong><small>Reported by {report.reporter?.name||'Member'} • {new Date(report.createdAt).toLocaleString()}</small></div><span className="report-reason">{report.reason}</span>{report.details&&<p>{report.details}</p>}<small>Status: {report.status}</small></article>)}{!reports.length&&<div className="empty-mini">No safety reports yet.</div>}</div>}
   </section>;
 }
+
 function AdminMessages(){
   const [messages,setMessages]=useState<any[]>([]);
   const [text,setText]=useState('');
+  const [replyTo,setReplyTo]=useState<any>(null);
   const [busy,setBusy]=useState(false);
-  const load=async()=>{try{const r=await api.get('/api/admin/messages');setMessages(r.data.messages||[]);}catch{}};
-  useEffect(()=>{load();},[]);
+  const load=async(mark=true)=>{try{const r=await api.get('/api/admin/messages');setMessages(r.data.messages||[]);if(mark&&(r.data.messages||[]).some((m:any)=>m.senderType==='admin'))await api.post('/api/admin/messages/read',{});}catch{}};
+  useEffect(()=>{load();const timer=window.setInterval(()=>load(false),5000);const handler=()=>load(false);window.addEventListener('naijaconnect-message',handler);const channel=supabase.channel('member-admin-chat-live').on('postgres_changes',{event:'*',schema:'public',table:'admin_messages'},()=>load(false)).subscribe();return()=>{window.clearInterval(timer);window.removeEventListener('naijaconnect-message',handler);supabase.removeChannel(channel);};},[]);
   const hasAdminMessage=messages.some(m=>m.senderType==='admin');
-  const send=async()=>{if(!text.trim()||busy||!hasAdminMessage)return;setBusy(true);try{await api.post('/api/admin/messages',{text:text.trim()});setText('');await load();}finally{setBusy(false);}};
+  const send=async()=>{if(!text.trim()||busy||!hasAdminMessage)return;setBusy(true);try{await api.post('/api/admin/messages',{text:text.trim(),replyToId:replyTo?.id});setText('');setReplyTo(null);await load();}finally{setBusy(false);}};
+  const react=async(m:any,reaction:string)=>{try{await api.post('/api/admin/message-reaction',{messageId:m.id,reaction});await load(false);}catch{}};
   if(!hasAdminMessage) return <section className="content-page"><div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>There are no messages from the official admin yet.</p></div></div><div className="empty-mini">When the admin sends you a message, it will appear here and you will be able to reply.</div></section>;
-  return <section className="content-page facebook-admin-chat">
+  return <section className="content-page admin-messages-page">
     <div className="page-heading"><div><span className="eyebrow">ADMIN MESSAGES</span><h1>Official NaijaConnect Admin</h1><p>Your private conversation with the official NaijaConnect admin. Members can only reply to the admin here.</p></div></div>
-    <div className="facebook-admin-thread">
-      {messages.map(m=><div className={m.senderType==='user'?'admin-chat-bubble mine':'admin-chat-bubble'} key={m.id}><p>{m.text}</p><time>{new Date(m.createdAt).toLocaleString()}</time></div>)}
-    </div>
-    <div className="admin-chat-compose">
-      <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Write a message…" onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}/>
-      <button className="send-icon-button" disabled={busy||!text.trim()} onClick={send} aria-label="Send message" title="Send message">➤</button>
+    <div className="facebook-admin-chat">
+      <div className="facebook-admin-thread">
+        {messages.map(m=><AdminMessageBubble key={m.id} m={m} messages={messages} mine={m.senderType==='user'} displayName="NaijaConnect Admin" onReply={setReplyTo} onReact={react}/>)}
+      </div>
+      {replyTo&&<div className="reply-compose"><span><strong>Replying to {replyTo.senderType==='admin'?'NaijaConnect Admin':'your message'}</strong><small>{replyTo.text}</small></span><button onClick={()=>setReplyTo(null)} aria-label="Cancel reply">×</button></div>}
+      <div className="admin-chat-compose">
+        <textarea value={text} onChange={e=>setText(e.target.value)} placeholder={replyTo?'Write your reply…':'Write a message…'} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}/>
+        <button className="send-icon-button" disabled={busy||!text.trim()} onClick={send} aria-label="Send message" title="Send message">➤</button>
+      </div>
     </div>
   </section>;
 }
