@@ -723,8 +723,11 @@ function ProfileCard({p,onLike,interested}:{p:Profile,onLike:(id:string)=>void,i
 }
 
 function ProfilePage({id,profiles,user,onLike,onConnect}:{id:string,profiles:Profile[],user:any,onLike:(id:string)=>void,onConnect:(p:Profile)=>void}){
-  const p=profiles.find(x=>x.id===id)||demoProfiles.find(x=>x.id===id);
-  const own=!!user&&p?.id===user.userId;
+  // A profile can be addressed by either its database profile id or the
+  // authenticated user's id. "View my profile" uses the latter, so support
+  // both identifiers instead of incorrectly reporting the profile as missing.
+  const p=profiles.find(x=>x.id===id || x.userId===id)||demoProfiles.find(x=>x.id===id || x.userId===id);
+  const own=!!user&&p?.userId===user.userId;
   const [menu,setMenu]=useState(false);
   const [slide,setSlide]=useState(0);
   const photos=(p?.photos&&p.photos.length?p.photos:(p?.photo?[p.photo]:[]));
