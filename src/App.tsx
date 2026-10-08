@@ -727,10 +727,12 @@ function ProfilePage({id,profiles,user,ownProfile,onLike,onConnect}:{id:string,p
   // A profile can be addressed by either its database profile id or the
   // authenticated user's id. "View my profile" uses the latter, so support
   // both identifiers instead of incorrectly reporting the profile as missing.
-  const p=(ownProfile && (ownProfile.id===id || ownProfile.userId===id) ? ownProfile : null) || profiles.find(x=>x.id===id || x.userId===id) || demoProfiles.find(x=>x.id===id || x.userId===id);
+  const p=(ownProfile && (ownProfile.id===id || ownProfile.userId===id) ? ownProfile : null) || (loadedProfile && (loadedProfile.id===id || loadedProfile.userId===id) ? loadedProfile : null) || profiles.find(x=>x.id===id || x.userId===id) || demoProfiles.find(x=>x.id===id || x.userId===id);
   const own=!!user&&p?.userId===user.userId;
   const [menu,setMenu]=useState(false);
   const [slide,setSlide]=useState(0);
+  const [loadedProfile,setLoadedProfile]=useState<Profile|null>(null);
+  useEffect(()=>{let alive=true;(async()=>{try{const r=await api.get('/api/me');if(alive&&r.data?.profile)setLoadedProfile(r.data.profile);}catch{}})();return()=>{alive=false;};},[id,user?.userId]);
   const photos=(p?.photos&&p.photos.length?p.photos:(p?.photo?[p.photo]:[]));
   const interests=Array.isArray(p?.interests)?p.interests:[];
   if(!p)return <Empty title="Profile not found" text="We couldn't load this profile yet. Please try again." action={()=>window.dispatchEvent(new Event('naijaconnect-profile-updated'))} actionText="Try again"/>;
@@ -1087,7 +1089,7 @@ function MyProfile({user,profile,onSaved}:{user:any,profile:Profile|null,onSaved
     <label className="bio-field">Bio<textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Write a little about yourself…"/></label>
     <label>Interests<input value={interests} onChange={e=>setInterests(e.target.value)} placeholder="Music, travel, food"/></label>
     <label>Looking for<select value={lookingFor} onChange={e=>setLookingFor(e.target.value)}><option>Dating / connection</option><option>Casual connection</option><option>Friendship</option><option>Serious relationship</option></select></label>
-    <button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your profile is now ready for discovery.</span></div><button className="secondary" onClick={()=>go('/profile/'+user.userId)}>View my profile <ChevronRight size={16}/></button></div>}
+    <button className="primary" disabled={saving} onClick={save}>{saving?'Saving profile…':'Save profile'}</button>{saved&&<div className="save-success"><Check size={20}/><div className="save-copy"><strong>Your profile has been saved.</strong><span>Your profile is now ready for discovery.</span></div><button className="secondary" onClick={async()=>{await onSaved();go('/profile/'+(profile?.id||user.userId));}}>View my profile <ChevronRight size={16}/></button></div>}
   </div></section>;
 }
 function SettingsPage({ user, signOut, onDeleteAccount }: { user: any; signOut: () => void; onDeleteAccount: () => Promise<void> }) {
