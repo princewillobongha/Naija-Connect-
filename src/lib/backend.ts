@@ -196,10 +196,13 @@ export const api = {
     }
     if (path.startsWith('/api/messages/')) {
       const other=path.split('/').pop();
-      if(!u) throw new Error('Unauthorized');
-      const {data,error}=await supabase.from('messages').select('*').or('sender_id.eq.'+u.id+',receiver_id.eq.'+u.id).order('created_at',{ascending:true});
+      if(!u || !other) throw new Error('Unauthorized');
+      // Limit the query to this exact conversation instead of downloading
+      // every message belonging to the signed-in user and filtering in JS.
+      const conversationFilter='and(sender_id.eq.'+u.id+',receiver_id.eq.'+other+'),and(sender_id.eq.'+other+',receiver_id.eq.'+u.id+')';
+      const {data,error}=await supabase.from('messages').select('id,sender_id,receiver_id,text,created_at').or(conversationFilter).order('created_at',{ascending:true});
       if(error) throw error;
-      return {data:{messages:(data||[]).filter((m:any)=>m.sender_id===other||m.receiver_id===other).map((m:any)=>({id:m.id,senderId:m.sender_id,receiverId:m.receiver_id,text:m.text,createdAt:new Date(m.created_at).getTime()}))}};
+      return {data:{messages:(data||[]).map((m:any)=>({id:m.id,senderId:m.sender_id,receiverId:m.receiver_id,text:m.text,createdAt:new Date(m.created_at).getTime()}))}};
     }
     throw new Error('Unsupported GET '+path);
   },
