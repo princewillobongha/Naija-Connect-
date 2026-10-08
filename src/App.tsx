@@ -1249,7 +1249,7 @@ function AdminPage(){
     }catch{setMessages([]);}
   };
   useEffect(()=>{Promise.all([loadUsers(),loadThreads(),loadReports()]);},[]);
-  useEffect(()=>{const timer=window.setInterval(()=>{loadThreads(); if(selected) loadThread(selected.id,false);},5000);return()=>window.clearInterval(timer);},[selected?.id]);
+  useEffect(()=>{const timer=window.setInterval(()=>{loadThreads(); if(selected) loadThread(selected.id,false);},15000);return()=>window.clearInterval(timer);},[selected?.id]);
   const select=async(u:any)=>{setSelected(u);setReplyTo(null);setStatus('');setShowChatMobile(true);await loadThread(u.id,true);};
   const visibleUsers=users.filter(u=>{const q=search.trim().toLowerCase();return !q || String(u.name||'').toLowerCase().includes(q) || String(u.city||'').toLowerCase().includes(q) || String(u.phone||'').toLowerCase().includes(q);});
   const selectThread=async(t:any)=>{
@@ -1323,7 +1323,7 @@ function AdminMessages(){
       if(markRead) await api.post('/api/admin/messages/read',{});
     }catch{}
   };
-  useEffect(()=>{load(true);const timer=window.setInterval(()=>load(false),5000);return()=>window.clearInterval(timer);},[]);
+  useEffect(()=>{load(true);const timer=window.setInterval(()=>load(false),15000);return()=>window.clearInterval(timer);},[]);
   const hasAdminMessage=messages.some(m=>m.senderType==='admin');
   const react=async(m:any,reaction:string)=>{try{await api.post('/api/admin/message-reaction',{messageId:m.id,reaction});await load(false);}catch{}};
   const send=async()=>{if(!text.trim()||busy||!hasAdminMessage)return;setBusy(true);try{await api.post('/api/admin/messages',{text:text.trim(),replyToId:replyTo?.id||null});setText('');setReplyTo(null);await load(true);}finally{setBusy(false);}};
