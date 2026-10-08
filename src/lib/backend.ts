@@ -213,15 +213,15 @@ export const api = {
       }
       const row:any={id:u.id,name:String(body.name||'').trim(),age:Number(body.age),gender:body.gender||null,city:String(body.city||'').trim(),country:body.country||'Nigeria',bio:body.bio||'',interests:Array.isArray(body.interests)?body.interests:[],looking_for:body.lookingFor||'Dating / connection',last_active_at:new Date().toISOString(),online:true};
       if(photo) row.photo=photo;
-      if(Array.isArray(body.photosData)){
+      if(Array.isArray(body.photosData) || Array.isArray(body.existingPhotos)){
         const uploaded:string[]=[];
-        for(let i=0;i<body.photosData.length;i++){
-          const item=String(body.photosData[i]||'');
+        for(let i=0;i<(body.photosData||[]).length;i++){
+          const item=String((body.photosData||[])[i]||'');
           if(item) uploaded.push(await uploadMedia(u.id,item,(body.photoContentTypes||[])[i]||'image/jpeg','profiles'));
         }
         const existing=Array.isArray(body.existingPhotos)?body.existingPhotos.filter((x:any)=>typeof x==='string'&&x):[];
-        row.photos=[...existing,...uploaded].slice(-6);
-        if(row.photos[0]) row.photo=row.photos[0];
+        row.photos=[...existing,...uploaded].slice(0,6);
+        row.photo=row.photos[0]||null;
       }
       const {data,error}=await supabase.from('profiles').upsert(row,{onConflict:'id'}).select().single();
       if(error) throw new Error('Could not save profile details. ' + error.message);
