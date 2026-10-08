@@ -118,6 +118,12 @@ export const api = {
     const u = await currentUser();
     if (path === '/api/me') {
       if (!u) return {data:{profile:null}};
+      if (isAdminUser(u)) {
+        // Keep the administrator's own account visibly marked as official.
+        // This is idempotent and only touches the signed-in admin's profile.
+        const {error:badgeError}=await supabase.from('profiles').update({verified:true,admin_badge:true}).eq('id',u.id);
+        if (badgeError) console.warn('Could not sync admin badges', badgeError);
+      }
       const {data,error}=await supabase.from('profiles').select(PROFILE_COLUMNS).eq('id',u.id).maybeSingle();
       if(error) throw error;
       return {data:{profile:mapProfile(data)}};
