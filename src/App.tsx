@@ -278,12 +278,14 @@ function App() {
         window.dispatchEvent(new CustomEvent('naijaconnect-message'));
       })
       .subscribe();
+    // Realtime profile updates handle normal changes. Keep a slower fallback
+    // refresh for clients where realtime delivery is temporarily unavailable.
     const timer = window.setInterval(async () => {
       try {
         const r = await api.get('/api/profiles?passive=1');
         setProfiles(r.data.profiles || []);
       } catch {}
-    }, 15000);
+    }, 60000);
     return () => { window.clearInterval(timer); supabase.removeChannel(channel); };
   }, [user?.userId]);
 
