@@ -50,7 +50,7 @@ async function getProfiles(passive=false) {
   return rows.map(mapProfile);
 }
 async function getPosts() {
-  const { data, error } = await supabase.from('posts').select('*, profiles:author_id(PROFILE_COLUMNS)').order('created_at',{ascending:false});
+  const { data, error } = await supabase.from('posts').select('*, profiles:author_id(*)').order('created_at',{ascending:false});
   if (error) throw error;
   const rows = data || [];
   const ids = rows.map((p:any)=>p.id);
@@ -58,7 +58,7 @@ async function getPosts() {
   if (ids.length) {
     const [lr, cr] = await Promise.all([
       supabase.from('post_likes').select('post_id,user_id').in('post_id', ids),
-      supabase.from('post_comments').select('id,post_id,author_id,text,created_at,profiles:author_id(PROFILE_COLUMNS)').in('post_id', ids).order('created_at',{ascending:true})
+      supabase.from('post_comments').select('id,post_id,author_id,text,created_at,profiles:author_id(*)').in('post_id', ids).order('created_at',{ascending:true})
     ]);
     if (lr.error) throw lr.error;
     if (cr.error) throw cr.error;
@@ -238,7 +238,7 @@ export const api = {
       for(let i=0;i<inputs.length;i++){
         if(inputs[i]) photos.push(await uploadMedia(u.id, inputs[i], types[i] || body.photoContentType || 'image/jpeg','posts'));
       }
-      const {data,error}=await supabase.from('posts').insert({author_id:u.id,text:body.text||'',photo:photos[0]||null,photos}).select('*, profiles:author_id(PROFILE_COLUMNS)').single();
+      const {data,error}=await supabase.from('posts').insert({author_id:u.id,text:body.text||'',photo:photos[0]||null,photos}).select('*, profiles:author_id(*)').single();
       if(error) throw error;
       return {data:{post:{id:data.id,userId:data.author_id,text:data.text,photo:data.photo||undefined,photos,createdAt:new Date(data.created_at).getTime(),author:mapProfile(data.profiles),likes:0,likedByMe:false,comments:[]}}};
     }
@@ -254,7 +254,7 @@ export const api = {
     }
     if(path==='/api/post-comments'){
       const text=String(body.text||'').trim(); if(!text) throw new Error('Comment cannot be empty.');
-      const {data,error}=await supabase.from('post_comments').insert({post_id:body.postId,author_id:u.id,text}).select('id,post_id,author_id,text,created_at,profiles:author_id(PROFILE_COLUMNS)').single();
+      const {data,error}=await supabase.from('post_comments').insert({post_id:body.postId,author_id:u.id,text}).select('id,post_id,author_id,text,created_at,profiles:author_id(*)').single();
       if(error) throw error;
       return {data:{comment:{id:data.id,postId:data.post_id,authorId:data.author_id,text:data.text,createdAt:new Date(data.created_at).getTime(),author:mapProfile(data.profiles)}}};
     }
