@@ -1376,3 +1376,9 @@ h1,h2,h3,h4,p,span,strong,small,button,label,div{overflow-wrap:anywhere}
   .admin-member-actions button{font-size:10px!important}
   .admin-chat-head{padding:9px 10px!important}
 }
+
+/* Safe interaction/accessibility polish; no auth, profile, or feed logic changed. */
+:where(a,button,input,select,textarea,[role="button"],[tabindex]):focus-visible{outline:2px solid #a78bfa;outline-offset:3px}
+button,a,[role="button"]{-webkit-tap-highlight-color:transparent}
+@media (hover:hover) and (prefers-reduced-motion:no-preference){.notification-item,.notification-open-all{transition:background-color .18s ease,transform .18s ease}.notification-item:hover{transform:translateY(-1px)}}
+@media (prefers-reduced-motion:reduce){html:focus-within{scroll-behavior:auto!important}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
